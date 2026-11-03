@@ -23,6 +23,8 @@ config/includes.chroot_after_packages/root/distro-build/
 *.zsync
 build.log
 chroot.files
+chroot.installed_tmp_pkgs
+binary.modified_timestamps
 chroot.packages.*
 
 # Test-VM
