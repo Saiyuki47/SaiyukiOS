@@ -26,6 +26,15 @@ HOME_URL="${DISTRO_URL}"
 SUPPORT_URL="${DISTRO_SUPPORT_URL}"
 LOGO=${DISTRO_ID}-logo
 OSR
+# live-build legt /etc/os-release als eigene Kopie von Debians Datei an
+# (plus IMAGE_ID/BUILD_ID). Programme lesen zuerst /etc – also auch dort
+# unsere Angaben eintragen und nur die Build-Kennung übernehmen.
+if [ -f /etc/os-release ] && [ ! -L /etc/os-release ]; then
+	EXTRA="$(grep -E '^(IMAGE_ID|BUILD_ID)=' /etc/os-release || true)"
+	cp /usr/lib/os-release /etc/os-release
+	[ -z "${EXTRA}" ] || echo "${EXTRA}" >> /etc/os-release
+fi
+
 # VERSION_CODENAME bleibt bewusst der Debian-Codename: viele Fremd-Paketquellen
 # (Docker, VS Code, ...) wählen darüber das passende Repository aus.
 
