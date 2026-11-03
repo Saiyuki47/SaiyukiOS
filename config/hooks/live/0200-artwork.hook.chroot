@@ -13,6 +13,10 @@ for size in 16 22 24 32 48 64 128 256 512; do
 done
 install -D -m 644 "${B}/logo.svg" "/usr/share/icons/hicolor/scalable/apps/${DISTRO_ID}-logo.svg"
 install -D -m 644 "${B}/logo-256.png" "/usr/share/pixmaps/${DISTRO_ID}-logo.png"
+# Startmenü-Symbol (Kickoff) und Distributionslogo für KDE
+for name in start-here-kde-symbolic start-here-kde start-here distributor-logo; do
+	install -D -m 644 "${B}/logo.svg" "/usr/share/icons/hicolor/scalable/apps/${name}.svg"
+done
 gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
 
 # --- Hintergrundbild ----------------------------------------------------
@@ -71,6 +75,15 @@ JSON
 	echo
 	printf '  \\e{bold}%s %s\\e{reset} \\n \\l\n\n' "${DISTRO_NAME}" "${DISTRO_VERSION}"
 } > /etc/issue
+
+# --- Begrüßung nach dem Login auf der Textkonsole --------------------------
+cat > /etc/motd <<MOTD
+
+${DISTRO_NAME} ${DISTRO_VERSION} basiert auf Debian GNU/Linux. Die enthaltenen Programme
+sind freie Software; die Lizenzen stehen jeweils in /usr/share/doc/*/copyright.
+Hilfe: ${DISTRO_SUPPORT_URL}
+
+MOTD
 
 # --- Boot-Splash (Plymouth), basierend auf dem Theme "spinner" ---------
 if [ -d /usr/share/plymouth/themes/spinner ]; then

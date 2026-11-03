@@ -52,6 +52,6 @@
   </g>
 
   <!-- Schriftzug -->
-  <text x="96" y="1000" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="40" font-weight="bold" fill="#FFFFFF" fill-opacity="0.75">@NAME@</text>
-  <text x="96" y="1036" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="20" fill="#FFFFFF" fill-opacity="0.45">@TAGLINE@</text>
+  <text x="96" y="890" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="40" font-weight="bold" fill="#FFFFFF" fill-opacity="0.75">@NAME@</text>
+  <text x="96" y="926" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="20" fill="#FFFFFF" fill-opacity="0.45">@TAGLINE@</text>
 </svg>
