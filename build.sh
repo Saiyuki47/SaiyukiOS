@@ -23,7 +23,7 @@ VOLUME="${DISTRO_NAME} ${DISTRO_VERSION}"
 [ "${#VOLUME}" -le 32 ] || die "\"${VOLUME}\" ist zu lang für das ISO-Label (max. 32 Zeichen)."
 
 # --- Werkzeuge ------------------------------------------------------------
-NEEDED="live-build librsvg2-bin fonts-cantarell fonts-dejavu-core curl ca-certificates gnupg"
+NEEDED="live-build apt-utils librsvg2-bin fonts-cantarell fonts-dejavu-core curl ca-certificates gnupg"
 MISSING=""
 for p in ${NEEDED}; do
 	dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed" || MISSING="${MISSING} ${p}"
