@@ -92,7 +92,7 @@ if [ "${NVIDIA_SUPPORT}" = "yes" ]; then
 	# Beim Bauen per http (wie die Debian-Spiegel, Signaturen prüft apt),
 	# im fertigen System per https.
 	echo "deb ${NVIDIA_REPO/https:/http:} /" > config/archives/nvidia.list.chroot
-	echo "deb ${NVIDIA_REPO} /"              > config/archives/nvidia.list.binary
+	echo "deb ${NVIDIA_REPO_FINAL:-${NVIDIA_REPO}} /" > config/archives/nvidia.list.binary
 
 	# NVIDIA-Pakete aus NVIDIAs Quelle bevorzugen und auf die Treiberreihe festnageln
 	cat > config/archives/nvidia.pref.chroot <<PREF

@@ -128,6 +128,44 @@ cat > "/etc/live/config.conf.d/${DISTRO_ID}.conf" <<CONF
 LIVE_USER_FULLNAME="${DISTRO_NAME} Live"
 CONF
 
+# Live-System: keine Bildschirmsperre und kein Abschalten des Bildschirms –
+# sonst sperrt Plasma z. B. während einer langen Installation und fragt nach
+# einem Passwort, das niemand kennt. live-config führt dieses Skript nur beim
+# Start des Live-Systems aus, das installierte System behält die Standardwerte.
+install -d /usr/lib/live/config
+cat > "/usr/lib/live/config/1200-${DISTRO_ID}-live-session" <<'SH'
+#!/bin/sh
+LIVE_USERNAME=user
+for arg in $(cat /proc/cmdline); do
+	case "${arg}" in live-config.username=*|username=*) LIVE_USERNAME="${arg#*=}" ;; esac
+done
+HOME_DIR="/home/${LIVE_USERNAME}"
+[ -d "${HOME_DIR}" ] || exit 0
+mkdir -p "${HOME_DIR}/.config"
+cat > "${HOME_DIR}/.config/kscreenlockerrc" <<INI
+[Daemon]
+Autolock=false
+LockOnResume=false
+INI
+cat > "${HOME_DIR}/.config/powerdevilrc" <<INI
+[AC][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[AC][SuspendAndShutdown]
+AutoSuspendAction=0
+
+[Battery][Display]
+DimDisplayWhenIdle=false
+TurnOffDisplayWhenIdle=false
+
+[Battery][SuspendAndShutdown]
+AutoSuspendAction=0
+INI
+chown -R "${LIVE_USERNAME}:" "${HOME_DIR}/.config"
+SH
+chmod 755 "/usr/lib/live/config/1200-${DISTRO_ID}-live-session"
+
 # Live-System: Die automatische Anmeldung (Plasma unter Wayland) richtet
 # live-config beim Start selbst ein (/etc/sddm.conf, nur im Live-System).
 

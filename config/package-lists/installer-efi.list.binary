@@ -1,0 +1,16 @@
+# Pakete, die der Installer (Calamares) erst während der Installation
+# einrichtet. live-build legt sie als Paketquelle ins ISO, damit die
+# Installation auch ohne Internet klappt.
+#
+# UEFI-Bootloader inkl. Secure Boot (signierter GRUB + shim)
+grub-efi
+grub-efi-amd64
+grub-efi-amd64-signed
+shim-signed
+efibootmgr
+mokutil
+
+# Für verschlüsselte Installationen
+cryptsetup
+cryptsetup-initramfs
+keyutils

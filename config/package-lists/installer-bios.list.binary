@@ -1,0 +1,3 @@
+# BIOS-Bootloader für den Installer (eigene Liste, da grub-pc und
+# grub-efi-amd64 sich gegenseitig ausschließen)
+grub-pc
