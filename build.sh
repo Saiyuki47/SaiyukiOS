@@ -43,7 +43,7 @@ else
 fi
 
 # --- Branding rendern und ins Image legen -------------------------------
-STAGE="config/includes.chroot_after_packages/tmp/distro-build"
+STAGE="config/includes.chroot_after_packages/root/distro-build"
 say "Rendere Branding für ${DISTRO_NAME}"
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}"
@@ -54,6 +54,23 @@ branding/render.sh "${STAGE}/branding"
 # --- live-build konfigurieren -------------------------------------------
 say "Konfiguriere live-build (Debian ${DEBIAN_SUITE}, ${ARCH})"
 lb config
+
+# --- Debian "contrib" als Zusatzquelle --------------------------------------
+# Nicht in --archive-areas (siehe auto/config), aber für einzelne Pakete wie
+# nvidia-settings (Treiber 550) nötig. So bleibt die automatische
+# Firmware-Auswahl von live-build frei von Download-"Installern".
+mkdir -p config/archives
+rm -f config/archives/debian-contrib.*
+cat > config/archives/debian-contrib.list.chroot <<LIST
+deb ${BUILD_MIRROR} @DISTRIBUTION@ contrib
+deb ${BUILD_MIRROR} @DISTRIBUTION@-updates contrib
+deb ${BUILD_MIRROR_SECURITY} @DISTRIBUTION@-security contrib
+LIST
+cat > config/archives/debian-contrib.list.binary <<LIST
+deb ${FINAL_MIRROR} @DISTRIBUTION@ contrib
+deb ${FINAL_MIRROR} @DISTRIBUTION@-updates contrib
+deb ${FINAL_MIRROR_SECURITY} @DISTRIBUTION@-security contrib
+LIST
 
 # --- NVIDIA-Paketquelle ----------------------------------------------------
 rm -f config/archives/nvidia.* config/package-lists/nvidia.list.chroot

@@ -2,8 +2,8 @@
 # Logo, Hintergrundbild, ASCII-Logo, Boot-Splash (Plymouth) und GRUB-Hintergrund.
 # (Plasma-spezifisches Design: 0300-desktop-defaults.hook.chroot)
 set -e
-. /tmp/distro-build/distro.conf
-B=/tmp/distro-build/branding
+. /root/distro-build/distro.conf
+B=/root/distro-build/branding
 SHARE="/usr/share/backgrounds/${DISTRO_ID}"
 
 # --- Logo als Icon (LOGO= in os-release verweist darauf) ---------------
@@ -18,11 +18,14 @@ gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
 # --- Hintergrundbild ----------------------------------------------------
 install -D -m 644 "${B}/wallpaper.png" "${SHARE}/wallpaper.png"
 install -D -m 644 "${B}/wallpaper.svg" "${SHARE}/wallpaper.svg"
-# Debian (desktop-base) verwaltet das Standard-Hintergrundbild über das
-# Alternativen-System. Unseres bekommt die höchste Priorität.
-update-alternatives --install /usr/share/images/desktop-base/desktop-background \
-	desktop-background "${SHARE}/wallpaper.png" 100
-update-alternatives --set desktop-background "${SHARE}/wallpaper.png"
+# Falls Debians Design-Paket (desktop-base) installiert ist: dort verwaltet das
+# Alternativen-System das Standard-Hintergrundbild. Unseres bekommt Vorrang.
+# (Für Plasma setzt 0300-desktop-defaults das Hintergrundbild.)
+if [ -d /usr/share/images/desktop-base ]; then
+	update-alternatives --install /usr/share/images/desktop-base/desktop-background \
+		desktop-background "${SHARE}/wallpaper.png" 100
+	update-alternatives --set desktop-background "${SHARE}/wallpaper.png"
+fi
 
 # --- KDE-Hintergrundbild-Paket -----------------------------------------
 WP="/usr/share/wallpapers/${DISTRO_NAME}"

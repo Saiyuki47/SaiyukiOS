@@ -1,7 +1,7 @@
 #!/bin/sh
 # Systemidentität: os-release, issue, Hostname-Vorgabe.
 set -e
-. /tmp/distro-build/distro.conf
+. /root/distro-build/distro.conf
 
 # /usr/lib/os-release gehört dem Paket base-files. Mit dpkg-divert wird das
 # Debian-Original beiseitegelegt, damit spätere base-files-Updates unsere

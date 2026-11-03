@@ -28,8 +28,11 @@ run() { echo "+ $*"; [ "${DRY}" = 1 ] || "$@"; }
 installed() {
 	dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' "$@" 2>/dev/null | awk '$1 ~ /^.i/ { print $2 }'
 }
+# Alle Pakete des NVIDIA-Treibers. Nicht dazu gehören:
+#  - libxnvctrl0: braucht auch Debians hwloc
+#  - firmware-nvidia-graphics: Firmware für den freien Treiber nouveau
 nvidia_packages() {
-	installed '*nvidia*' 'libcuda1' 'libnvcuvid1' 'libnvoptix1' 'libxnvctrl0'
+	installed '*nvidia*' 'libcuda1' 'libnvcuvid1' 'libnvoptix1' | grep -vx 'firmware-nvidia-graphics'
 }
 # NVIDIA-Paketquelle ab-/wieder anschalten. Die Dateien werden nicht gelöscht,
 # sondern beiseitegelegt – so lässt sie sich nach einem Kartenwechsel
@@ -62,6 +65,8 @@ esac
 case "${CHOICE}" in
 none|nouveau)
 	PKGS="$(nvidia_packages)"
+	# Ohne NVIDIA-Karte braucht auch nouveau keine Firmware
+	[ "${CHOICE}" = "none" ] && PKGS="${PKGS} $(installed firmware-nvidia-graphics)"
 	if [ -n "${PKGS}" ]; then
 		echo "Entferne nicht benötigte NVIDIA-Treiber ..."
 		# shellcheck disable=SC2086
@@ -83,6 +88,10 @@ none|nouveau)
 		/usr/local/sbin/@ID@-nvidia-secureboot
 	;;
 open)
+	# Firmware für Debians Rechenzentrums-Treiber (Tesla) wird nie gebraucht
+	PKGS="$(installed 'firmware-nvidia-tesla-*')"
+	# shellcheck disable=SC2086
+	[ -z "${PKGS}" ] || run ${APT} purge ${PKGS}
 	if [ -z "$(installed nvidia-kernel-open-dkms)" ]; then
 		echo "Wechsle auf den aktuellen NVIDIA-Treiber (benötigt Internet) ..."
 		PKGS="$(nvidia_packages)"
@@ -105,12 +114,16 @@ legacy)
 		# 2) NVIDIA-Paketquelle abschalten, sonst würde wieder 595+ gewählt
 		remove_nvidia_repo
 		# 3) Debians Treiber installieren – offline aus dem mitgebrachten Zwischenspeicher
-		if ls "${CACHE}"/*.deb >/dev/null 2>&1 && run ${APT} --no-download install "${CACHE}"/*.deb; then
-			:
+		#    Die Pakete kommen in apts eigenen Zwischenspeicher – dort nimmt apt
+		#    sie ohne Download (als lokale Dateien würde es sie neu laden wollen).
+		LEGACY_PKGS="nvidia-driver nvidia-kernel-dkms nvidia-settings nvidia-vaapi-driver"
+		if ls "${CACHE}"/*.deb >/dev/null 2>&1 && run cp "${CACHE}"/*.deb /var/cache/apt/archives/ && \
+		   run ${APT} --no-download install ${LEGACY_PKGS}; then
+			run apt-get clean
 		else
 			echo "Zwischenspeicher unvollständig – lade aus dem Internet ..."
 			run apt-get update
-			run ${APT} install nvidia-driver nvidia-kernel-dkms nvidia-settings nvidia-vaapi-driver
+			run ${APT} install ${LEGACY_PKGS}
 		fi
 		run ${APT} autoremove --purge
 	fi

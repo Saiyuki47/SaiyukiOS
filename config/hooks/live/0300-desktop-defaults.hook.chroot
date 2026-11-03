@@ -4,8 +4,8 @@
 # unter Wayland), Konsole mit fastfetch-Begrüßung.
 # Benutzer können alles in den Systemeinstellungen selbst ändern.
 set -e
-. /tmp/distro-build/distro.conf
-B=/tmp/distro-build/branding
+. /root/distro-build/distro.conf
+B=/root/distro-build/branding
 WP="/usr/share/wallpapers/${DISTRO_NAME}"
 LNF_ID="org.${DISTRO_ID}.desktop"
 LNF="/usr/share/plasma/look-and-feel/${LNF_ID}"
@@ -43,12 +43,12 @@ touch "${D}"
 sed -i '/^\[Wallpaper\]/,/^\[/{/^\[Wallpaper\]/d;/^\[/!d}' "${D}"
 printf '\n[Wallpaper]\nImage=%s\n' "${DISTRO_NAME}" >> "${D}"
 # Startbildschirm (KSplash) auf das eigene Design zeigen lassen
-sed -i "s|^Theme=org.kde.breeze.*.desktop|Theme=${LNF_ID}|" "${D}"
-# Logo im Startbildschirm austauschen
+sed -i "/^\[KSplash\]/,/^\[/ s|^Theme=.*|Theme=${LNF_ID}|" "${D}"
+# Logo im Startbildschirm austauschen (der Hinweis "Plasma made by KDE" bleibt)
 if [ -d "${LNF}/contents/splash/images" ]; then
 	cp "${B}/logo-256.png" "${LNF}/contents/splash/images/${DISTRO_ID}-logo.png"
 	for qml in "${LNF}"/contents/splash/*.qml; do
-		sed -i -E "s#source: *\"images/(plasma|kde)\.svgz?\"#source: \"images/${DISTRO_ID}-logo.png\"#" "${qml}"
+		sed -i -E "s#source: *\"images/plasma\.svgz?\"#source: \"images/${DISTRO_ID}-logo.png\"#" "${qml}"
 	done
 fi
 

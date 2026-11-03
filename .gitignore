@@ -12,7 +12,7 @@ config/common
 config/source
 config/bootloaders/
 config/hooks/normal/
-config/includes.chroot_after_packages/tmp/
+config/includes.chroot_after_packages/root/distro-build/
 
 # Ergebnisse
 *.iso

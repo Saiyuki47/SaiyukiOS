@@ -2,8 +2,8 @@
 # NVIDIA: automatische Treiberwahl, Kernel-Modesetting für Wayland,
 # Standby/Ruhezustand, PRIME-Offload für Laptops und ein Helfer für Secure Boot.
 set -e
-. /tmp/distro-build/distro.conf
-N=/tmp/distro-build/nvidia
+. /root/distro-build/distro.conf
+N=/root/distro-build/nvidia
 
 if ! dpkg -s nvidia-kernel-open-dkms >/dev/null 2>&1; then
 	echo "NVIDIA-Treiber nicht im Image (NVIDIA_SUPPORT=no) – überspringe."
@@ -31,9 +31,13 @@ systemctl enable "${DISTRO_ID}-gpu-select.service"
 CACHE="/var/cache/${DISTRO_ID}/nvidia-legacy"
 T="$(mktemp -d)"
 mkdir -p "${T}/sources.list.d" "${T}/preferences.d" "${T}/lists/partial" "${T}/archives/partial"
+# alle Paketquellen außer NVIDIAs
+for f in /etc/apt/sources.list.d/*.list; do
+	case "${f##*/}" in nvidia*) ;; *) cp "${f}" "${T}/sources.list.d/" ;; esac
+done
 awk 'BEGIN { RS = ""; ORS = "\n\n" }
 	{ split($0, l, "\n"); name = l[1]; sub(/^Package: */, "", name)
-	  if (name ~ /nvidia/ || name ~ /^(libcuda1|libnvcuvid1|libnvoptix1|libxnvctrl0)$/) next
+	  if (name ~ /nvidia/ || name ~ /^(libcuda1|libnvcuvid1|libnvoptix1)$/) next
 	  print }' /var/lib/dpkg/status > "${T}/status"
 DEBIAN_ONLY="-o Dir::Etc::SourceParts=${T}/sources.list.d -o Dir::Etc::PreferencesParts=${T}/preferences.d
 	-o Dir::State::Lists=${T}/lists -o Dir::State::status=${T}/status -o Dir::Cache::Archives=${T}/archives

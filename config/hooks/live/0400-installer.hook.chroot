@@ -1,8 +1,8 @@
 #!/bin/sh
 # Calamares-Installer: eigenes Branding, eigene Diashow, deutsche Voreinstellungen.
 set -e
-. /tmp/distro-build/distro.conf
-B=/tmp/distro-build/branding
+. /root/distro-build/distro.conf
+B=/root/distro-build/branding
 CAL=/etc/calamares
 
 [ -f "${CAL}/settings.conf" ] || { echo "Calamares nicht installiert – überspringe."; exit 0; }
@@ -148,6 +148,9 @@ i18n:
     name: "Grafiktreiber einrichten"
 YAML
 	S="${CAL}/settings.conf"
+	if grep -q "shellprocess@${GPU_ID}" "${S}"; then
+		echo "Calamares: Schritt ${GPU_ID} ist schon eingereiht."
+	else
 	# 1) Instanz anmelden (Einrückung der vorhandenen Einträge übernehmen)
 	if grep -q '^instances:' "${S}"; then
 		awk -v id="${GPU_ID}" '
@@ -171,16 +174,16 @@ YAML
 			break
 		fi
 	done
+	fi
 	grep -q "shellprocess@${GPU_ID}" "${S}" || { echo "Calamares: Schritt für Grafiktreiber konnte nicht eingereiht werden" >&2; exit 1; }
 fi
 
-# --- Zeitzone vorbelegen ---------------------------------------------------
-if [ -f "${CAL}/modules/locale.conf" ]; then
-	sed -i -E \
-		-e "s|^(\s*)region:.*|\1region: \"${TIMEZONE%%/*}\"|" \
-		-e "s|^(\s*)zone:.*|\1zone: \"${TIMEZONE#*/}\"|" \
-		"${CAL}/modules/locale.conf"
-fi
+# --- Zeitzone vorbelegen (Debian liefert keine locale.conf mit) -------------
+cat > "${CAL}/modules/locale.conf" <<YAML
+---
+region: "${TIMEZONE%%/*}"
+zone: "${TIMEZONE#*/}"
+YAML
 
 # --- Startmenü-/Desktop-Eintrag "Debian installieren" umbenennen ------------
 for f in $(grep -l -i '^Exec=.*calamares' /usr/share/applications/*.desktop 2>/dev/null); do
