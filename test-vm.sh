@@ -22,7 +22,14 @@ done
 command -v qemu-system-x86_64 >/dev/null || { echo "Bitte installieren: sudo apt install qemu-system-x86 ovmf" >&2; exit 1; }
 
 ARGS=(-m 4096 -smp 2 -vga virtio -nic user,model=virtio-net-pci -device qemu-xhci -device usb-tablet)
-if [ -w /dev/kvm ]; then ARGS+=(-enable-kvm -cpu host); else echo "Hinweis: kein KVM – die VM läuft deutlich langsamer."; fi
+if [ -w /dev/kvm ]; then
+	ARGS+=(-enable-kvm -cpu host)
+else
+	echo "Hinweis: kein KVM – die VM läuft deutlich langsamer."
+	# Ohne KVM rendert Plasma per Software (llvmpipe). Dessen AVX-Code läuft
+	# in QEMUs CPU-Emulation nicht stabil, daher ein CPU-Modell ohne AVX.
+	ARGS+=(-accel tcg,thread=multi -cpu Westmere)
+fi
 
 if [ "${UEFI}" = 1 ]; then
 	CODE=/usr/share/OVMF/OVMF_CODE_4M.fd VARS=/usr/share/OVMF/OVMF_VARS_4M.fd
