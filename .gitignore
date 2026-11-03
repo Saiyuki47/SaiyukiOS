@@ -1,0 +1,36 @@
+# Erzeugt von live-build
+.build/
+cache/
+chroot/
+binary/
+local/
+config/binary
+config/bootstrap
+config/build
+config/chroot
+config/common
+config/source
+config/bootloaders/
+config/hooks/normal/
+config/includes.chroot_after_packages/tmp/
+
+# Ergebnisse
+*.iso
+*.iso.sha256
+*.contents
+*.files
+*.packages
+*.zsync
+build.log
+chroot.files
+chroot.packages.*
+
+# Test-VM
+vm-disk.qcow2
+vm-uefi-vars.fd
+config/archives/
+config/package-lists/nvidia.list.chroot
+config/hooks/live/0010-disable-kexec-tools.hook.chroot
+config/hooks/live/0050-disable-sysvinit-tmpfs.hook.chroot
+.lock
+config/package-lists/live.list.chroot

@@ -1,0 +1,12 @@
+[Unit]
+Description=@NAME@: passenden Treiber für NVIDIA-Grafikkarten laden
+After=systemd-udev-trigger.service systemd-modules-load.service
+Before=display-manager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/@ID@/gpu-select
+
+[Install]
+WantedBy=multi-user.target

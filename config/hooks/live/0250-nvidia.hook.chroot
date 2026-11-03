@@ -1,0 +1,145 @@
+#!/bin/sh
+# NVIDIA: automatische Treiberwahl, Kernel-Modesetting für Wayland,
+# Standby/Ruhezustand, PRIME-Offload für Laptops und ein Helfer für Secure Boot.
+set -e
+. /tmp/distro-build/distro.conf
+N=/tmp/distro-build/nvidia
+
+if ! dpkg -s nvidia-kernel-open-dkms >/dev/null 2>&1; then
+	echo "NVIDIA-Treiber nicht im Image (NVIDIA_SUPPORT=no) – überspringe."
+	exit 0
+fi
+
+# --- Treiberwahl: Erkennung, Live-Auswahl, Einrichtung bei der Installation ---
+subst() { sed -e "s|@ID@|${DISTRO_ID}|g" -e "s|@NAME@|${DISTRO_NAME}|g" "$1"; }
+install -d "/usr/libexec/${DISTRO_ID}"
+subst "${N}/gpu-detect"   > "/usr/libexec/${DISTRO_ID}/gpu-detect"
+subst "${N}/gpu-select"   > "/usr/libexec/${DISTRO_ID}/gpu-select"
+subst "${N}/driver-setup" > "/usr/sbin/${DISTRO_ID}-driver-setup"
+chmod 755 "/usr/libexec/${DISTRO_ID}/gpu-detect" "/usr/libexec/${DISTRO_ID}/gpu-select" \
+	"/usr/sbin/${DISTRO_ID}-driver-setup"
+subst "${N}/gpu-select.service" > "/etc/systemd/system/${DISTRO_ID}-gpu-select.service"
+systemctl enable "${DISTRO_ID}-gpu-select.service"
+
+# Debians NVIDIA-Treiber 550 für GTX 750 bis GTX 1080 / Titan V zwischenspeichern:
+# NVIDIAs aktuelle Treiber (590+) unterstützen diese Karten nicht mehr. Der
+# Installer tauscht den Treiber dann auch ohne Internet aus; auf allen anderen
+# Rechnern wird der Zwischenspeicher gelöscht.
+#
+# Berechnet wird, was apt bräuchte, wenn KEIN NVIDIA-Paket installiert wäre
+# und nur Debians Paketquellen zur Verfügung stünden.
+CACHE="/var/cache/${DISTRO_ID}/nvidia-legacy"
+T="$(mktemp -d)"
+mkdir -p "${T}/sources.list.d" "${T}/preferences.d" "${T}/lists/partial" "${T}/archives/partial"
+awk 'BEGIN { RS = ""; ORS = "\n\n" }
+	{ split($0, l, "\n"); name = l[1]; sub(/^Package: */, "", name)
+	  if (name ~ /nvidia/ || name ~ /^(libcuda1|libnvcuvid1|libnvoptix1|libxnvctrl0)$/) next
+	  print }' /var/lib/dpkg/status > "${T}/status"
+DEBIAN_ONLY="-o Dir::Etc::SourceParts=${T}/sources.list.d -o Dir::Etc::PreferencesParts=${T}/preferences.d
+	-o Dir::State::Lists=${T}/lists -o Dir::State::status=${T}/status -o Dir::Cache::Archives=${T}/archives
+	-o Dir::Cache::pkgcache= -o Dir::Cache::srcpkgcache="
+rm -rf "${CACHE}"
+install -d "${CACHE}"
+# shellcheck disable=SC2086
+if apt-get ${DEBIAN_ONLY} update -qq && \
+   apt-get ${DEBIAN_ONLY} install -s -y nvidia-driver nvidia-kernel-dkms nvidia-settings nvidia-vaapi-driver \
+	> "${T}/plan"; then
+	# "Inst paket [alt] (version ...)" → paket=version
+	awk '/^Inst / { v = ($3 ~ /^\[/) ? $4 : $3; sub(/^\(/, "", v); print $2 "=" v }' "${T}/plan" > "${T}/want"
+	( cd "${CACHE}" && xargs apt-get ${DEBIAN_ONLY} download -qq < "${T}/want" )
+	echo "Zwischengespeichert für GTX 750 bis GTX 1080 ($(du -sh "${CACHE}" | cut -f1)):"
+	ls -1 "${CACHE}" | sed 's/^/    /'
+else
+	echo "WARNUNG: Debians NVIDIA-Treiber 550 konnte nicht zwischengespeichert werden." >&2
+	echo "         GTX 750 bis 1080 brauchen dann bei der Installation Internet." >&2
+	rm -rf "${CACHE}"
+fi
+rm -rf "${T}"
+
+# --- Modul-Optionen -----------------------------------------------------------
+# Debian benennt die Module je nach Treiberversion "nvidia-current-*" oder
+# "nvidia-*". Optionen für nicht vorhandene Module ignoriert modprobe, daher
+# stehen hier beide Namen.
+cat > "/etc/modprobe.d/${DISTRO_ID}-nvidia.conf" <<CONF
+# ${DISTRO_NAME}: NVIDIA-Voreinstellungen
+#
+# modeset=1  Kernel-Modesetting – Voraussetzung für Wayland (Plasma, SDDM)
+# fbdev=1    hochauflösende Textkonsole und flackerfreier Start
+options nvidia-drm modeset=1 fbdev=1
+options nvidia-current-drm modeset=1 fbdev=1
+
+# Grafikspeicher bei Standby/Ruhezustand sichern – sonst bleibt unter Wayland
+# nach dem Aufwachen oft ein schwarzer Bildschirm.
+options nvidia NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp
+options nvidia-current NVreg_PreserveVideoMemoryAllocations=1 NVreg_TemporaryFilePath=/var/tmp
+CONF
+
+# Standby-/Ruhezustand-Dienste von NVIDIA aktivieren (falls vorhanden)
+for unit in nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service; do
+	if [ -e "/usr/lib/systemd/system/${unit}" ] || [ -e "/lib/systemd/system/${unit}" ]; then
+		systemctl enable "${unit}"
+	fi
+done
+
+# --- Video-Hardwarebeschleunigung (VA-API über NVDEC) --------------------------
+# Nur aktiv, wenn NVIDIA die einzige Grafikkarte ist – bei Laptops mit zwei
+# Grafikchips bleibt die sparsame integrierte Grafik für Videos zuständig.
+install -d /usr/lib/systemd/user-environment-generators
+cat > "/usr/lib/systemd/user-environment-generators/60-${DISTRO_ID}-nvidia-vaapi" <<'SH'
+#!/bin/sh
+nvidia=0 other=0
+for v in /sys/class/drm/card[0-9]*/device/vendor; do
+	[ -r "$v" ] || continue
+	case "$(cat "$v")" in
+		0x10de) nvidia=1 ;;
+		*) other=1 ;;
+	esac
+done
+if [ "$nvidia" = 1 ] && [ "$other" = 0 ] && { [ -d /sys/module/nvidia_drm ] || [ -d /sys/module/nvidia_current_drm ]; }; then
+	echo LIBVA_DRIVER_NAME=nvidia
+	echo NVD_BACKEND=direct
+fi
+SH
+chmod 755 "/usr/lib/systemd/user-environment-generators/60-${DISTRO_ID}-nvidia-vaapi"
+
+# --- prime-run: Programm auf der NVIDIA-Karte starten (Optimus-Laptops) ------
+cat > /usr/local/bin/prime-run <<'SH'
+#!/bin/sh
+# Startet ein Programm auf der NVIDIA-Grafikkarte, z. B.: prime-run steam
+# (In Plasma geht das auch per Rechtsklick → "Mit dedizierter Grafikkarte starten".)
+export __NV_PRIME_RENDER_OFFLOAD=1
+export __GLX_VENDOR_LIBRARY_NAME=nvidia
+export __VK_LAYER_NV_optimus=NVIDIA_only
+export VK_LOADER_DRIVERS_SELECT='nvidia_icd.json'
+exec "$@"
+SH
+chmod 755 /usr/local/bin/prime-run
+
+# --- Secure Boot ---------------------------------------------------------------
+# DKMS signiert die NVIDIA-Module mit einem Schlüssel aus /var/lib/dkms.
+# Der beim Image-Bau erzeugte private Schlüssel darf NICHT mit ausgeliefert
+# werden (sonst hätten alle Installationen denselben). Er wird in
+# 9900-cleanup entfernt; nach der Installation erzeugt dieser Helfer einen
+# eigenen Schlüssel und meldet ihn zur Registrierung an.
+cat > "/usr/local/sbin/${DISTRO_ID}-nvidia-secureboot" <<SH
+#!/bin/sh
+# ${DISTRO_NAME}: NVIDIA-Treiber für Secure Boot vorbereiten
+set -e
+[ "\$(id -u)" -eq 0 ] || exec sudo "\$0" "\$@"
+
+if [ ! -f /var/lib/dkms/mok.key ]; then
+	echo "Erzeuge einen neuen, nur für diesen Rechner gültigen Signaturschlüssel ..."
+	rm -f /var/lib/dkms/mok.pub
+fi
+echo "Baue und signiere die NVIDIA-Module neu ..."
+dkms autoinstall --force
+[ -f /var/lib/dkms/mok.pub ] || { echo "Kein Schlüssel entstanden – ist dkms aktuell?" >&2; exit 1; }
+
+echo
+echo "Jetzt wird nach einem Einmal-Passwort gefragt (frei wählbar, z. B. 12345678)."
+mokutil --import /var/lib/dkms/mok.pub
+echo
+echo "Fertig. Beim nächsten Neustart erscheint ein blauer Bildschirm (MOK-Manager):"
+echo "  'Enroll MOK' → 'Continue' → 'Yes' → Einmal-Passwort eingeben → 'Reboot'."
+SH
+chmod 755 "/usr/local/sbin/${DISTRO_ID}-nvidia-secureboot"

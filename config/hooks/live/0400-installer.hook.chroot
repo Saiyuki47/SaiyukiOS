@@ -1,0 +1,194 @@
+#!/bin/sh
+# Calamares-Installer: eigenes Branding, eigene Diashow, deutsche Voreinstellungen.
+set -e
+. /tmp/distro-build/distro.conf
+B=/tmp/distro-build/branding
+CAL=/etc/calamares
+
+[ -f "${CAL}/settings.conf" ] || { echo "Calamares nicht installiert – überspringe."; exit 0; }
+
+# --- Branding-Verzeichnis ------------------------------------------------
+BR="${CAL}/branding/${DISTRO_ID}"
+rm -rf "${BR}"
+install -d "${BR}"
+cp "${B}/logo-128.png" "${BR}/logo.png"
+cp "${B}/logo-48.png"  "${BR}/icon.png"
+cp "${B}/splash.png"   "${BR}/welcome.png"
+
+cat > "${BR}/branding.desc" <<YAML
+---
+componentName:  ${DISTRO_ID}
+
+welcomeStyleCalamares:   false
+welcomeExpandingLogo:   true
+windowExpanding:    normal
+windowSize: 900px,580px
+windowPlacement: center
+sidebar: widget
+navigation: widget
+
+strings:
+    productName:         "${DISTRO_NAME}"
+    shortProductName:    "${DISTRO_NAME}"
+    version:             "${DISTRO_VERSION}"
+    shortVersion:        "${DISTRO_VERSION}"
+    versionedName:       "${DISTRO_NAME} ${DISTRO_VERSION} (${DISTRO_CODENAME})"
+    shortVersionedName:  "${DISTRO_NAME} ${DISTRO_VERSION}"
+    bootloaderEntryName: "${DISTRO_NAME}"
+    productUrl:          "${DISTRO_URL}"
+    supportUrl:          "${DISTRO_SUPPORT_URL}"
+    knownIssuesUrl:      "${DISTRO_SUPPORT_URL}"
+    releaseNotesUrl:     "${DISTRO_URL}"
+
+images:
+    productLogo:         "logo.png"
+    productIcon:         "icon.png"
+    productWelcome:      "welcome.png"
+
+slideshow:               "show.qml"
+slideshowAPI:            2
+
+style:
+    SidebarBackground:        "${COLOR_DARK}"
+    SidebarText:              "#FFFFFF"
+    SidebarTextCurrent:       "#FFFFFF"
+    SidebarBackgroundCurrent: "${COLOR_PRIMARY}"
+YAML
+
+cat > "${BR}/show.qml" <<QML
+import QtQuick 2.0;
+import calamares.slideshow 1.0;
+
+Presentation
+{
+    id: presentation
+
+    Timer {
+        interval: 15000
+        running: presentation.activatedInCalamares
+        repeat: true
+        onTriggered: presentation.goToNextSlide()
+    }
+
+    Slide {
+        Rectangle { anchors.fill: parent; color: "${COLOR_DARK}" }
+        Image {
+            id: logo1
+            source: "logo.png"
+            width: 128; height: 128
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.top: parent.top; anchors.topMargin: 40
+        }
+        Text {
+            anchors.top: logo1.bottom; anchors.topMargin: 24
+            width: parent.width
+            horizontalAlignment: Text.Center
+            wrapMode: Text.WordWrap
+            color: "#FFFFFF"; font.pixelSize: 22
+            text: "Willkommen bei ${DISTRO_NAME} ${DISTRO_VERSION}<br/><small>${DISTRO_TAGLINE}</small>"
+        }
+    }
+
+    Slide {
+        Rectangle { anchors.fill: parent; color: "${COLOR_DARK}" }
+        Text {
+            anchors.centerIn: parent
+            width: parent.width - 80
+            horizontalAlignment: Text.Center
+            wrapMode: Text.WordWrap
+            color: "#FFFFFF"; font.pixelSize: 20
+            text: "KDE Plasma unter Wayland<br/><br/><small>Ein moderner, flüssiger Desktop mit Dolphin als Dateimanager. Unter <i>Systemeinstellungen</i> passt du alles an.</small>"
+        }
+    }
+
+    Slide {
+        Rectangle { anchors.fill: parent; color: "${COLOR_DARK}" }
+        Text {
+            anchors.centerIn: parent
+            width: parent.width - 80
+            horizontalAlignment: Text.Center
+            wrapMode: Text.WordWrap
+            color: "#FFFFFF"; font.pixelSize: 20
+            text: "Bereit für NVIDIA<br/><br/><small>Der NVIDIA-Treiber ist bereits installiert und für Wayland eingerichtet. Laptops mit zwei Grafikchips starten Programme per Rechtsklick auf der dedizierten Karte.</small>"
+        }
+    }
+
+    Slide {
+        Rectangle { anchors.fill: parent; color: "${COLOR_DARK}" }
+        Text {
+            anchors.centerIn: parent
+            width: parent.width - 80
+            horizontalAlignment: Text.Center
+            wrapMode: Text.WordWrap
+            color: "#FFFFFF"; font.pixelSize: 20
+            text: "Über 60.000 Programme<br/><br/><small>${DISTRO_NAME} basiert auf Debian. Mit Discover oder <tt>sudo apt install</tt> installierst du alles, was Debian anbietet – inklusive Sicherheitsupdates.</small>"
+        }
+    }
+
+    function onActivate() { presentation.currentSlide = 0; }
+    function onLeave() { }
+}
+QML
+
+sed -i -E "s|^branding:.*|branding: ${DISTRO_ID}|" "${CAL}/settings.conf"
+
+# --- Grafiktreiber während der Installation einrichten ----------------------------
+# Eigener Calamares-Schritt: erkennt die Grafikkarte, behält nur den passenden
+# NVIDIA-Treiber und entfernt alle unnötigen (siehe nvidia/driver-setup).
+if [ -x "/usr/sbin/${DISTRO_ID}-driver-setup" ]; then
+	GPU_ID="${DISTRO_ID}gpu"
+	cat > "${CAL}/modules/shellprocess_${GPU_ID}.conf" <<YAML
+---
+dontChroot: false
+timeout: 1800
+script:
+    - command: "/usr/sbin/${DISTRO_ID}-driver-setup --installer"
+      timeout: 1800
+i18n:
+    name: "Grafiktreiber einrichten"
+YAML
+	S="${CAL}/settings.conf"
+	# 1) Instanz anmelden (Einrückung der vorhandenen Einträge übernehmen)
+	if grep -q '^instances:' "${S}"; then
+		awk -v id="${GPU_ID}" '
+			{ print }
+			/^instances:/ && !done { getline nxt; ind = nxt; sub(/-.*/, "", ind)
+				printf "%s- id:       %s\n%s  module:   shellprocess\n%s  config:   shellprocess_%s.conf\n", ind, id, ind, ind, id
+				print nxt; done = 1 }' "${S}" > "${S}.new"
+	else
+		awk -v id="${GPU_ID}" '
+			/^sequence:/ && !done { printf "instances:\n- id:       %s\n  module:   shellprocess\n  config:   shellprocess_%s.conf\n\n", id, id; done = 1 }
+			{ print }' "${S}" > "${S}.new"
+	fi
+	mv "${S}.new" "${S}"
+	# 2) In den Ablauf einreihen: vor "initramfs" (sonst vor "bootloader")
+	for before in initramfs bootloader; do
+		if grep -qE "^[[:space:]]*- ${before}[[:space:]]*\$" "${S}"; then
+			awk -v id="${GPU_ID}" -v b="${before}" '
+				$0 ~ "^[[:space:]]*- " b "[[:space:]]*$" && !done { ind = $0; sub(/-.*/, "", ind); print ind "- shellprocess@" id; done = 1 }
+				{ print }' "${S}" > "${S}.new"
+			mv "${S}.new" "${S}"
+			break
+		fi
+	done
+	grep -q "shellprocess@${GPU_ID}" "${S}" || { echo "Calamares: Schritt für Grafiktreiber konnte nicht eingereiht werden" >&2; exit 1; }
+fi
+
+# --- Zeitzone vorbelegen ---------------------------------------------------
+if [ -f "${CAL}/modules/locale.conf" ]; then
+	sed -i -E \
+		-e "s|^(\s*)region:.*|\1region: \"${TIMEZONE%%/*}\"|" \
+		-e "s|^(\s*)zone:.*|\1zone: \"${TIMEZONE#*/}\"|" \
+		"${CAL}/modules/locale.conf"
+fi
+
+# --- Startmenü-/Desktop-Eintrag "Debian installieren" umbenennen ------------
+for f in $(grep -l -i '^Exec=.*calamares' /usr/share/applications/*.desktop 2>/dev/null); do
+	sed -i -E \
+		-e '/^(Name|GenericName|Comment)\[/d' \
+		-e "s|^Name=.*|Name=${DISTRO_NAME} installieren|" \
+		-e "s|^GenericName=.*|GenericName=Installationsprogramm|" \
+		-e "s|^Comment=.*|Comment=${DISTRO_NAME} dauerhaft auf diesem Computer installieren|" \
+		-e "s|^Icon=.*|Icon=${DISTRO_ID}-logo|" \
+		"${f}"
+done

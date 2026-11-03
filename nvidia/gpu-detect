@@ -1,0 +1,42 @@
+#!/bin/sh
+# Ermittelt, welcher Grafiktreiber zu den eingebauten NVIDIA-Karten passt.
+#
+# Ausgabe (eine Zeile):
+#   none         keine NVIDIA-Karte verbaut
+#   open         RTX 20 / GTX 16 bis RTX 50 und neuer: aktueller NVIDIA-Treiber
+#                (NVIDIA-Paketquelle) mit offenen Kernelmodulen
+#   legacy       GTX 750 bis GTX 1080 / Titan V: von NVIDIA nur noch bis Treiber-
+#                reihe 580 unterstützt → Debians NVIDIA-Treiber 550
+#   nouveau      ältere Karten (GTX 600/700 und früher): freier Treiber nouveau
+#
+# Grundlage sind NVIDIAs PCI-Geräte-IDs: Die offenen Module unterstützen
+# alle GPUs ab 0x1E00 (Turing). Maxwell beginnt bei 0x1340.
+# Mit -v steht zusätzlich eine Zeile pro Karte auf stderr.
+SYS="${SYSFS_ROOT:-/sys}"
+verbose=0
+[ "$1" = "-v" ] && verbose=1
+
+open=0 prop=0 old=0 blackwell=0
+for dev in "${SYS}"/bus/pci/devices/*; do
+	[ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x10de" ] || continue
+	case "$(cat "${dev}/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+	id=$(( $(cat "${dev}/device") ))
+	if [ "${id}" -ge $((0x1E00)) ]; then
+		kind=open; open=1
+		[ "${id}" -ge $((0x2900)) ] && blackwell=1
+	elif [ "${id}" -ge $((0x1340)) ]; then
+		kind=legacy; prop=1
+	else
+		kind=nouveau; old=1
+	fi
+	[ "${verbose}" = 1 ] && printf '  %s  [10de:%04x]  -> %s\n' "${dev##*/}" "${id}" "${kind}" >&2
+done
+
+if [ "${open}" = 0 ] && [ "${prop}" = 0 ]; then
+	[ "${old}" = 1 ] && echo nouveau || echo none
+elif [ "${prop}" = 1 ] && [ "${blackwell}" = 0 ]; then
+	# Debians Treiber 550 deckt Maxwell bis Ada ab – auch gemischte Systeme
+	echo legacy
+else
+	echo open
+fi

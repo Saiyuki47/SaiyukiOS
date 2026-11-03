@@ -1,0 +1,33 @@
+#!/bin/sh
+# Systemidentität: os-release, issue, Hostname-Vorgabe.
+set -e
+. /tmp/distro-build/distro.conf
+
+# /usr/lib/os-release gehört dem Paket base-files. Mit dpkg-divert wird das
+# Debian-Original beiseitegelegt, damit spätere base-files-Updates unsere
+# Version nicht überschreiben.
+if [ -z "$(dpkg-divert --list /usr/lib/os-release)" ]; then
+	dpkg-divert --local --rename --divert /usr/lib/os-release.debian --add /usr/lib/os-release
+fi
+DEBIAN_VERSION_ID="$(. /usr/lib/os-release.debian; echo "${VERSION_ID}")"
+DEBIAN_CODENAME="$(. /usr/lib/os-release.debian; echo "${VERSION_CODENAME}")"
+
+cat > /usr/lib/os-release <<OSR
+PRETTY_NAME="${DISTRO_NAME} ${DISTRO_VERSION} (${DISTRO_CODENAME})"
+NAME="${DISTRO_NAME}"
+VERSION_ID="${DISTRO_VERSION}"
+VERSION="${DISTRO_VERSION} (${DISTRO_CODENAME})"
+VERSION_CODENAME=${DEBIAN_CODENAME}
+ID=${DISTRO_ID}
+ID_LIKE=debian
+DEBIAN_VERSION_ID="${DEBIAN_VERSION_ID}"
+DEBIAN_CODENAME=${DEBIAN_CODENAME}
+HOME_URL="${DISTRO_URL}"
+SUPPORT_URL="${DISTRO_SUPPORT_URL}"
+LOGO=${DISTRO_ID}-logo
+OSR
+# VERSION_CODENAME bleibt bewusst der Debian-Codename: viele Fremd-Paketquellen
+# (Docker, VS Code, ...) wählen darüber das passende Repository aus.
+
+# /etc/issue mit ASCII-Logo: siehe 0200-artwork.hook.chroot
+printf '%s %s\n' "${DISTRO_NAME}" "${DISTRO_VERSION}" > /etc/issue.net

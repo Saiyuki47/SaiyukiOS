@@ -1,0 +1,125 @@
+#!/bin/sh
+# =====================================================================
+#  @NAME@: passenden Grafiktreiber einrichten, unnötige Treiber entfernen
+#
+#  Läuft automatisch während der Installation und kann jederzeit erneut
+#  gestartet werden, z. B. nach dem Einbau einer anderen Grafikkarte:
+#
+#    sudo @ID@-driver-setup             erkennen und einrichten
+#    sudo @ID@-driver-setup --dry-run   nur anzeigen, nichts ändern
+# =====================================================================
+set -e
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+DRY=0
+for arg in "$@"; do
+	case "${arg}" in
+		--dry-run) DRY=1 ;;
+		--installer) ;;  # Aufruf aus dem Installer (Calamares)
+		*) echo "Unbekannte Option: ${arg}" >&2; exit 2 ;;
+	esac
+done
+
+CACHE=/var/cache/@ID@/nvidia-legacy
+export DEBIAN_FRONTEND=noninteractive
+APT="apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold"
+
+run() { echo "+ $*"; [ "${DRY}" = 1 ] || "$@"; }
+installed() {
+	dpkg-query -W -f='${db:Status-Abbrev} ${Package}\n' "$@" 2>/dev/null | awk '$1 ~ /^.i/ { print $2 }'
+}
+nvidia_packages() {
+	installed '*nvidia*' 'libcuda1' 'libnvcuvid1' 'libnvoptix1' 'libxnvctrl0'
+}
+# NVIDIA-Paketquelle ab-/wieder anschalten. Die Dateien werden nicht gelöscht,
+# sondern beiseitegelegt – so lässt sie sich nach einem Kartenwechsel
+# wiederherstellen.
+REPO_FILES="/etc/apt/sources.list.d/nvidia.list /etc/apt/preferences.d/nvidia.pref /etc/apt/trusted.gpg.d/nvidia.key.binary.asc"
+REPO_BACKUP=/usr/share/@ID@/nvidia-repo
+remove_nvidia_repo() {
+	for f in ${REPO_FILES}; do
+		[ -e "${f}" ] || continue
+		run install -D -m 644 "${f}" "${REPO_BACKUP}${f}"
+		run rm -f "${f}"
+	done
+}
+restore_nvidia_repo() {
+	for f in ${REPO_FILES}; do
+		[ -e "${REPO_BACKUP}${f}" ] && [ ! -e "${f}" ] && run install -D -m 644 "${REPO_BACKUP}${f}" "${f}"
+	done
+	return 0
+}
+
+echo "Grafikkarten:"
+CHOICE="$(/usr/libexec/@ID@/gpu-detect -v)"
+case "${CHOICE}" in
+	none)        echo "→ Keine NVIDIA-Karte: NVIDIA-Treiber werden nicht gebraucht." ;;
+	nouveau)     echo "→ Ältere NVIDIA-Karte: freier Treiber nouveau (im Kernel enthalten)." ;;
+	open)        echo "→ NVIDIA-Treiber mit offenen Kernelmodulen (RTX 20 / GTX 16 und neuer)." ;;
+	legacy)      echo "→ GTX 750 bis GTX 1080 / Titan V: Debians NVIDIA-Treiber 550 (aktuelle NVIDIA-Treiber unterstützen diese Karten nicht mehr)." ;;
+esac
+
+case "${CHOICE}" in
+none|nouveau)
+	PKGS="$(nvidia_packages)"
+	if [ -n "${PKGS}" ]; then
+		echo "Entferne nicht benötigte NVIDIA-Treiber ..."
+		# shellcheck disable=SC2086
+		run ${APT} purge ${PKGS}
+	fi
+	# DKMS und Kernel-Header werden nur für NVIDIA gebraucht – außer, es
+	# hängen noch andere DKMS-Module daran (z. B. VirtualBox).
+	if command -v dkms >/dev/null 2>&1 && [ -z "$(dkms status 2>/dev/null)" ]; then
+		HEADERS="$(installed 'linux-headers-*')"
+		# shellcheck disable=SC2086
+		run ${APT} purge dkms ${HEADERS}
+	fi
+	run ${APT} autoremove --purge
+	# NVIDIA-Paketquelle und Zusatzdateien entfernen
+	remove_nvidia_repo
+	run rm -f /etc/modprobe.d/@ID@-nvidia.conf \
+		/usr/lib/systemd/user-environment-generators/60-@ID@-nvidia-vaapi \
+		/usr/local/bin/prime-run \
+		/usr/local/sbin/@ID@-nvidia-secureboot
+	;;
+open)
+	if [ -z "$(installed nvidia-kernel-open-dkms)" ]; then
+		echo "Wechsle auf den aktuellen NVIDIA-Treiber (benötigt Internet) ..."
+		PKGS="$(nvidia_packages)"
+		# shellcheck disable=SC2086
+		[ -z "${PKGS}" ] || run ${APT} purge ${PKGS}
+		restore_nvidia_repo
+		run apt-get update
+		run ${APT} install nvidia-driver nvidia-kernel-open-dkms nvidia-settings nvidia-vaapi-driver
+		run ${APT} autoremove --purge
+	fi
+	;;
+legacy)
+	if [ -z "$(installed nvidia-kernel-dkms)" ] || [ -n "$(installed nvidia-kernel-open-dkms)" ]; then
+		echo "Wechsle auf Debians NVIDIA-Treiber 550 ..."
+		# 1) Aktuellen NVIDIA-Treiber (unterstützt diese Karte nicht) entfernen –
+		#    ohne autoremove, damit gemeinsame Abhängigkeiten erhalten bleiben.
+		PKGS="$(nvidia_packages)"
+		# shellcheck disable=SC2086
+		[ -z "${PKGS}" ] || run ${APT} purge ${PKGS}
+		# 2) NVIDIA-Paketquelle abschalten, sonst würde wieder 595+ gewählt
+		remove_nvidia_repo
+		# 3) Debians Treiber installieren – offline aus dem mitgebrachten Zwischenspeicher
+		if ls "${CACHE}"/*.deb >/dev/null 2>&1 && run ${APT} --no-download install "${CACHE}"/*.deb; then
+			:
+		else
+			echo "Zwischenspeicher unvollständig – lade aus dem Internet ..."
+			run apt-get update
+			run ${APT} install nvidia-driver nvidia-kernel-dkms nvidia-settings nvidia-vaapi-driver
+		fi
+		run ${APT} autoremove --purge
+	fi
+	;;
+esac
+
+# Zwischengespeicherte Ausweich-Pakete werden danach nicht mehr gebraucht
+run rm -rf "${CACHE}"
+echo "Grafiktreiber eingerichtet: ${CHOICE}"
+[ "${CHOICE}" = "legacy" ] || [ "${CHOICE}" = "open" ] && \
+	echo "Hinweis: Bei aktivem Secure Boot einmal 'sudo @ID@-nvidia-secureboot' ausführen."
+exit 0

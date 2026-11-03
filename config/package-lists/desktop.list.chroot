@@ -1,0 +1,34 @@
+# Live-System-Grundlage
+live-boot
+live-config
+live-config-systemd
+
+# KDE Plasma 6 – läuft standardmäßig als Wayland-Sitzung
+kde-plasma-desktop
+kwin-wayland
+xwayland
+sddm
+sddm-theme-breeze
+kde-config-sddm
+xdg-desktop-portal-kde
+plasma-nm
+plasma-pa
+kscreen
+powerdevil
+bluedevil
+plasma-discover
+plasma-systemmonitor
+kinfocenter
+kde-config-gtk-style
+breeze-gtk-theme
+
+# Deutsche Sprachpakete
+task-german
+task-german-desktop
+task-german-kde-desktop
+
+# Aussehen und Boot-Splash
+fonts-noto-core
+fonts-noto-color-emoji
+plymouth
+plymouth-themes

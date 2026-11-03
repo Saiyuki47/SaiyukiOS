@@ -1,0 +1,21 @@
+# NVIDIA-Pakete für das Live-System (aus NVIDIAs Debian-13-Paketquelle).
+# build.sh kopiert diese Liste nach config/package-lists/, wenn in
+# distro.conf NVIDIA_SUPPORT="yes" gesetzt ist.
+#
+# Im Image stecken die OFFENEN Kernelmodule: sie laufen auf allen Karten ab
+# RTX 20 / GTX 16 bis einschließlich RTX 50. Für GTX 750 bis 1080 / Titan V
+# liegt der proprietäre Kernelteil als Paket bereit und wird bei der
+# Installation automatisch eingesetzt (saiyukios-driver-setup).
+linux-headers-amd64
+nvidia-driver
+nvidia-kernel-open-dkms
+nvidia-settings
+nvidia-vaapi-driver
+
+# Laptops mit zwei Grafikchips (Intel/AMD + NVIDIA, "Optimus")
+switcheroo-control
+
+# Diagnose
+nvtop
+vulkan-tools
+mesa-utils

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Build-Hilfsdateien und geheime Schlüssel wieder aus dem Image entfernen.
+set -e
+rm -rf /tmp/distro-build
+
+# Privater DKMS-Signaturschlüssel aus dem Build: nie mit ausliefern
+# (siehe 0250-nvidia.hook.chroot).
+rm -f /var/lib/dkms/mok.key /var/lib/dkms/mok.pub

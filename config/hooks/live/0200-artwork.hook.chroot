@@ -1,0 +1,97 @@
+#!/bin/sh
+# Logo, Hintergrundbild, ASCII-Logo, Boot-Splash (Plymouth) und GRUB-Hintergrund.
+# (Plasma-spezifisches Design: 0300-desktop-defaults.hook.chroot)
+set -e
+. /tmp/distro-build/distro.conf
+B=/tmp/distro-build/branding
+SHARE="/usr/share/backgrounds/${DISTRO_ID}"
+
+# --- Logo als Icon (LOGO= in os-release verweist darauf) ---------------
+for size in 16 22 24 32 48 64 128 256 512; do
+	install -D -m 644 "${B}/logo-${size}.png" \
+		"/usr/share/icons/hicolor/${size}x${size}/apps/${DISTRO_ID}-logo.png"
+done
+install -D -m 644 "${B}/logo.svg" "/usr/share/icons/hicolor/scalable/apps/${DISTRO_ID}-logo.svg"
+install -D -m 644 "${B}/logo-256.png" "/usr/share/pixmaps/${DISTRO_ID}-logo.png"
+gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
+
+# --- Hintergrundbild ----------------------------------------------------
+install -D -m 644 "${B}/wallpaper.png" "${SHARE}/wallpaper.png"
+install -D -m 644 "${B}/wallpaper.svg" "${SHARE}/wallpaper.svg"
+# Debian (desktop-base) verwaltet das Standard-Hintergrundbild über das
+# Alternativen-System. Unseres bekommt die höchste Priorität.
+update-alternatives --install /usr/share/images/desktop-base/desktop-background \
+	desktop-background "${SHARE}/wallpaper.png" 100
+update-alternatives --set desktop-background "${SHARE}/wallpaper.png"
+
+# --- KDE-Hintergrundbild-Paket -----------------------------------------
+WP="/usr/share/wallpapers/${DISTRO_NAME}"
+install -d "${WP}/contents/images"
+for res in 1920x1080 2560x1440 3840x2160; do
+	install -m 644 "${B}/wallpaper-${res}.png" "${WP}/contents/images/${res}.png"
+done
+install -m 644 "${B}/wallpaper-preview.png" "${WP}/contents/screenshot.png"
+cat > "${WP}/metadata.json" <<JSON
+{
+    "KPlugin": {
+        "Authors": [ { "Name": "${DISTRO_PUBLISHER}" } ],
+        "Id": "${DISTRO_NAME}",
+        "License": "CC-BY-SA-4.0",
+        "Name": "${DISTRO_NAME}"
+    }
+}
+JSON
+
+# --- ASCII-Logo: fastfetch und Text-Login (/etc/issue) -------------------
+install -D -m 644 "${B}/ascii-logo.txt" "/usr/share/${DISTRO_ID}/ascii-logo.txt"
+install -d /etc/xdg/fastfetch
+cat > /etc/xdg/fastfetch/config.jsonc <<JSON
+{
+    "\$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+    "logo": {
+        "type": "file",
+        "source": "/usr/share/${DISTRO_ID}/ascii-logo.txt",
+        "color": { "1": "green", "2": "white" },
+        "padding": { "top": 1, "right": 3 }
+    },
+    "display": { "color": { "keys": "green" } },
+    "modules": [
+        "title", "separator", "os", "kernel", "uptime", "packages", "shell",
+        "de", "wm", "terminal", "cpu", "gpu", "memory", "disk", "break", "colors"
+    ]
+}
+JSON
+# /etc/issue (wird vor dem Text-Login angezeigt) – mit farbigem Blatt
+{
+	echo
+	sed -e 's/^/\\e{green}/' -e 's/\$1/\\e{green}/g' -e 's/\$2/\\e{white}/g' -e 's/$/\\e{reset}/' "${B}/ascii-logo.txt"
+	echo
+	printf '  \\e{bold}%s %s\\e{reset} \\n \\l\n\n' "${DISTRO_NAME}" "${DISTRO_VERSION}"
+} > /etc/issue
+
+# --- Boot-Splash (Plymouth), basierend auf dem Theme "spinner" ---------
+if [ -d /usr/share/plymouth/themes/spinner ]; then
+	T="/usr/share/plymouth/themes/${DISTRO_ID}"
+	rm -rf "${T}"
+	cp -a /usr/share/plymouth/themes/spinner "${T}"
+	mv "${T}/spinner.plymouth" "${T}/${DISTRO_ID}.plymouth"
+	sed -i \
+		-e "s|^Name=.*|Name=${DISTRO_NAME}|" \
+		-e "s|^Description=.*|Description=${DISTRO_NAME} Boot-Splash|" \
+		-e "s|/themes/spinner|/themes/${DISTRO_ID}|g" \
+		"${T}/${DISTRO_ID}.plymouth"
+	cp "${B}/logo-128.png" "${T}/watermark.png"
+	# Hintergrundfarbe und Logo-Position im [two-step]-Abschnitt setzen
+	sed -i -E '/^(Watermark(Horizontal|Vertical)Alignment|Background(Start|End)Color)=/d' \
+		"${T}/${DISTRO_ID}.plymouth"
+	sed -i "/^\[two-step\]/a WatermarkHorizontalAlignment=.5\nWatermarkVerticalAlignment=.4\nBackgroundStartColor=0x${COLOR_DARK#\#}\nBackgroundEndColor=0x${COLOR_DARK#\#}" \
+		"${T}/${DISTRO_ID}.plymouth"
+	plymouth-set-default-theme "${DISTRO_ID}"
+fi
+
+# --- GRUB-Hintergrund im installierten System --------------------------
+install -d /etc/default/grub.d
+cat > "/etc/default/grub.d/50_${DISTRO_ID}.cfg" <<CFG
+# ${DISTRO_NAME}: eigenes GRUB-Hintergrundbild
+GRUB_BACKGROUND="${SHARE}/wallpaper.png"
+CFG

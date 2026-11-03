@@ -1,0 +1,32 @@
+# Vorinstallierte Programme – einfach ergänzen oder entfernen
+# Dateimanager
+dolphin
+dolphin-plugins
+kio-extras
+ffmpegthumbs
+kdegraphics-thumbnailers
+
+# KDE-Programme
+konsole
+kate
+ark
+okular
+gwenview
+kde-spectacle
+kcalc
+partitionmanager
+
+# Internet, Büro, Multimedia
+firefox-esr
+libreoffice-writer
+libreoffice-calc
+libreoffice-impress
+libreoffice-qt6
+vlc
+
+# Werkzeuge
+fastfetch
+htop
+curl
+git
+nano

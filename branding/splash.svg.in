@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600" viewBox="0 0 800 600">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="@DARK@"/>
+      <stop offset="1" stop-color="#15402F"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" fill="url(#sky)"/>
+  <!-- Logo: wird von render.sh als PNG eingebettet -->
+  <image x="342" y="72" width="116" height="116" href="@LOGO_PNG@"/>
+  <text x="400" y="228" text-anchor="middle" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="36" font-weight="bold" fill="#fff">@NAME@ @VERSION@</text>
+  <text x="400" y="256" text-anchor="middle" font-family="Cantarell, DejaVu Sans, sans-serif" font-size="16" fill="#fff" fill-opacity="0.6">@TAGLINE@</text>
+  <!-- Bergkette unten -->
+  <path d="M0 560 L120 500 L200 540 L320 470 L440 545 L540 495 L660 550 L800 490 L800 600 L0 600 Z" fill="#0A1C14"/>
+</svg>

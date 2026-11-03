@@ -1,0 +1,8 @@
+#!/bin/sh
+# Wird von "lb clean" aufgerufen. Entfernt Build-Reste, aber nie deine Quelldateien.
+set -e
+
+lb clean noauto "${@}"
+
+rm -f config/binary config/bootstrap config/chroot config/common config/source config/build
+rm -f build.log

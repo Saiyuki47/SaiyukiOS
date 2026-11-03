@@ -1,0 +1,134 @@
+#!/bin/sh
+# KDE-Plasma-Voreinstellungen: eigenes "Globales Design" (Look-and-Feel),
+# Akzentfarbe, Hintergrundbild, Sperrbildschirm, Anmeldebildschirm (SDDM
+# unter Wayland), Konsole mit fastfetch-Begrüßung.
+# Benutzer können alles in den Systemeinstellungen selbst ändern.
+set -e
+. /tmp/distro-build/distro.conf
+B=/tmp/distro-build/branding
+WP="/usr/share/wallpapers/${DISTRO_NAME}"
+LNF_ID="org.${DISTRO_ID}.desktop"
+LNF="/usr/share/plasma/look-and-feel/${LNF_ID}"
+
+hex2rgb() { printf '%d,%d,%d' "0x$(echo "$1" | cut -c2-3)" "0x$(echo "$1" | cut -c4-5)" "0x$(echo "$1" | cut -c6-7)"; }
+ACCENT_RGB="$(hex2rgb "${COLOR_PRIMARY}")"
+
+# --- Globales Design, abgeleitet von "Breeze Dunkel" ------------------------
+SRC=/usr/share/plasma/look-and-feel/org.kde.breezedark.desktop
+[ -d "${SRC}" ] || SRC=/usr/share/plasma/look-and-feel/org.kde.breeze.desktop
+rm -rf "${LNF}"
+cp -a "${SRC}" "${LNF}"
+# Breeze Dunkel bringt keinen eigenen Startbildschirm mit, Breeze schon.
+if [ ! -d "${LNF}/contents/splash" ] && [ -d /usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/splash ]; then
+	cp -a /usr/share/plasma/look-and-feel/org.kde.breeze.desktop/contents/splash "${LNF}/contents/"
+fi
+cat > "${LNF}/metadata.json" <<JSON
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [ { "Name": "${DISTRO_PUBLISHER}" } ],
+        "Description": "${DISTRO_NAME}: Breeze Dunkel mit grünem Akzent",
+        "Id": "${LNF_ID}",
+        "License": "GPL-2.0+",
+        "Name": "${DISTRO_NAME}",
+        "Version": "${DISTRO_VERSION}",
+        "Website": "${DISTRO_URL}"
+    },
+    "X-Plasma-APIVersion": "2"
+}
+JSON
+D="${LNF}/contents/defaults"
+touch "${D}"
+# [Wallpaper]-Abschnitt ersetzen
+sed -i '/^\[Wallpaper\]/,/^\[/{/^\[Wallpaper\]/d;/^\[/!d}' "${D}"
+printf '\n[Wallpaper]\nImage=%s\n' "${DISTRO_NAME}" >> "${D}"
+# Startbildschirm (KSplash) auf das eigene Design zeigen lassen
+sed -i "s|^Theme=org.kde.breeze.*.desktop|Theme=${LNF_ID}|" "${D}"
+# Logo im Startbildschirm austauschen
+if [ -d "${LNF}/contents/splash/images" ]; then
+	cp "${B}/logo-256.png" "${LNF}/contents/splash/images/${DISTRO_ID}-logo.png"
+	for qml in "${LNF}"/contents/splash/*.qml; do
+		sed -i -E "s#source: *\"images/(plasma|kde)\.svgz?\"#source: \"images/${DISTRO_ID}-logo.png\"#" "${qml}"
+	done
+fi
+
+# --- Systemweite Standardwerte für alle (neuen) Benutzer --------------------
+cat > /etc/xdg/kdeglobals <<INI
+[General]
+AccentColor=${ACCENT_RGB}
+ColorScheme=BreezeDark
+
+[Icons]
+Theme=breeze-dark
+
+[KDE]
+LookAndFeelPackage=${LNF_ID}
+INI
+
+cat > /etc/xdg/ksplashrc <<INI
+[KSplash]
+Engine=KSplashQML
+Theme=${LNF_ID}
+INI
+
+cat > /etc/xdg/kscreenlockerrc <<INI
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file://${WP}/contents/images/1920x1080.png
+PreviewImage=file://${WP}/contents/images/1920x1080.png
+INI
+
+# Dolphin: vollständigen Pfad anzeigen, Archive wie Ordner öffnen
+cat > /etc/xdg/dolphinrc <<INI
+[General]
+ShowFullPath=true
+BrowseThroughArchives=true
+INI
+
+# --- Anmeldebildschirm: SDDM selbst läuft unter Wayland (KWin) --------------
+install -d /etc/sddm.conf.d
+cat > "/etc/sddm.conf.d/10-${DISTRO_ID}.conf" <<INI
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+DefaultSession=plasma.desktop
+
+[Wayland]
+CompositorCommand=kwin_wayland --drm --no-lockscreen --no-global-shortcuts --locale1
+
+[Theme]
+Current=breeze
+CursorTheme=breeze_cursors
+INI
+if [ -d /usr/share/sddm/themes/breeze ]; then
+	cat > /usr/share/sddm/themes/breeze/theme.conf.user <<INI
+[General]
+type=image
+background=${WP}/contents/images/1920x1080.png
+INI
+fi
+
+# Live-System: Die automatische Anmeldung (Plasma unter Wayland) richtet
+# live-config beim Start selbst ein (/etc/sddm.conf, nur im Live-System).
+
+# --- Konsole: eigenes Profil, begrüßt mit fastfetch und dem Blatt -----------
+cat > "/usr/libexec/${DISTRO_ID}-shell" <<'SH'
+#!/bin/sh
+# Startet die Standard-Shell, nachdem fastfetch das Systemlogo gezeigt hat.
+command -v fastfetch >/dev/null && fastfetch
+exec "${SHELL:-/bin/bash}"
+SH
+chmod 755 "/usr/libexec/${DISTRO_ID}-shell"
+install -d /usr/share/konsole
+cat > "/usr/share/konsole/${DISTRO_NAME}.profile" <<INI
+[General]
+Name=${DISTRO_NAME}
+Command=/usr/libexec/${DISTRO_ID}-shell
+Parent=FALLBACK/
+
+[Appearance]
+ColorScheme=Breeze
+INI
+cat > /etc/xdg/konsolerc <<INI
+[Desktop Entry]
+DefaultProfile=${DISTRO_NAME}.profile
+INI

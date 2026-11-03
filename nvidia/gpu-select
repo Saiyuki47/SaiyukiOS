@@ -1,0 +1,33 @@
+#!/bin/sh
+# Läuft bei jedem Start vor dem Anmeldebildschirm.
+#
+# Karten ab RTX 20 bekommen automatisch den offenen NVIDIA-Treiber (udev).
+# Jede NVIDIA-Karte, an der danach noch kein Treiber hängt (z. B. GTX 1080 im
+# Live-System, oder ältere Modelle), bekommt den freien Treiber nouveau.
+# Bootoption @ID@.gpu=nouveau erzwingt nouveau.
+force=""
+for arg in $(cat /proc/cmdline); do
+	case "${arg}" in @ID@.gpu=*) force="${arg#*=}" ;; esac
+done
+
+udevadm settle --timeout=30 || true
+
+if [ "${force}" = "nouveau" ]; then
+	for m in nvidia_drm nvidia_modeset nvidia_uvm nvidia; do modprobe -r "${m}" 2>/dev/null || true; done
+fi
+
+need=0
+for dev in /sys/bus/pci/devices/*; do
+	[ "$(cat "${dev}/vendor" 2>/dev/null)" = "0x10de" ] || continue
+	case "$(cat "${dev}/class" 2>/dev/null)" in 0x03*) ;; *) continue ;; esac
+	[ -e "${dev}/driver" ] || need=1
+done
+
+if [ "${need}" = 1 ]; then
+	# NVIDIAs Pakete sperren nouveau per /etc/modprobe.d – "-C /dev/null"
+	# lädt das Modul ohne diese Sperre.
+	if modprobe -C /dev/null nouveau; then
+		echo "NVIDIA-Karte ohne Treiber gefunden – nouveau geladen."
+	fi
+fi
+exit 0

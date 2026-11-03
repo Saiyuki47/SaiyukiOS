@@ -1,0 +1,5 @@
+#!/bin/sh
+# Wird von "lb build" aufgerufen. Logging übernimmt build.sh.
+set -e
+
+lb build noauto "${@}"
