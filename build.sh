@@ -89,9 +89,11 @@ if [ "${NVIDIA_SUPPORT}" = "yes" ]; then
 	rm -rf "${TMP}"
 	cp config/archives/nvidia.key.chroot config/archives/nvidia.key.binary
 
-	# Beim Bauen per http (wie die Debian-Spiegel, Signaturen prüft apt),
-	# im fertigen System per https.
-	echo "deb ${NVIDIA_REPO/https:/http:} /" > config/archives/nvidia.list.chroot
+	# NVIDIAs Server leitet http auf https um – daher direkt https (das
+	# Grundsystem enthält dafür ca-certificates, siehe auto/config).
+	# NVIDIA_REPO_BUILD erlaubt eine andere Adresse nur für den Build,
+	# z. B. für einen lokalen Paket-Proxy.
+	echo "deb ${NVIDIA_REPO_BUILD:-${NVIDIA_REPO}} /" > config/archives/nvidia.list.chroot
 	echo "deb ${NVIDIA_REPO_FINAL:-${NVIDIA_REPO}} /" > config/archives/nvidia.list.binary
 
 	# NVIDIA-Pakete aus NVIDIAs Quelle bevorzugen und auf die Treiberreihe festnageln
