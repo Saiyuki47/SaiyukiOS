@@ -151,6 +151,7 @@ sed -i \
 sed -i 's|^set default=0|set default=0\nset timeout=10|' "${BL}/grub-pc/config.cfg"
 sed -i -e 's|^title-text:.*|title-text: ""|' \
 	-e 's|@TIMEOUT_NOTIFICATION_LONG@|Automatischer Start in %d Sekunden|' \
+	-e 's|@KEYMAP_SHORT@|Enter: starten · E: Startoptionen bearbeiten · C: Kommandozeile|' \
 	"${BL}/grub-pc/live-theme/theme.txt"
 
 # ISOLINUX (BIOS): gleiche Einträge; nur ASCII, da ISOLINUX kein UTF-8 kann
