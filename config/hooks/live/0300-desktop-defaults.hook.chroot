@@ -52,6 +52,21 @@ if [ -d "${LNF}/contents/splash/images" ]; then
 	done
 fi
 
+# Standard-Leiste: Blatt-Logo als Startmenü-Symbol (gilt für neue Benutzer)
+LAYOUT="${LNF}/contents/layouts/org.kde.plasma.desktop-layout.js"
+if [ -f "${LAYOUT}" ] && ! grep -q "${DISTRO_ID}-logo" "${LAYOUT}"; then
+	cat >> "${LAYOUT}" <<JS
+
+// ${DISTRO_NAME}: Blatt-Logo als Startmenü-Symbol
+for (const p of panels()) {
+    for (const w of p.widgets("org.kde.plasma.kickoff")) {
+        w.currentConfigGroup = ["General"];
+        w.writeConfig("icon", "${DISTRO_ID}-logo");
+    }
+}
+JS
+fi
+
 # --- Systemweite Standardwerte für alle (neuen) Benutzer --------------------
 cat > /etc/xdg/kdeglobals <<INI
 [General]
@@ -106,6 +121,12 @@ type=image
 background=${WP}/contents/images/1920x1080.png
 INI
 fi
+
+# Live-System: Anzeigename des Live-Benutzers (Standard wäre "Debian Live user")
+install -d /etc/live/config.conf.d
+cat > "/etc/live/config.conf.d/${DISTRO_ID}.conf" <<CONF
+LIVE_USER_FULLNAME="${DISTRO_NAME} Live"
+CONF
 
 # Live-System: Die automatische Anmeldung (Plasma unter Wayland) richtet
 # live-config beim Start selbst ein (/etc/sddm.conf, nur im Live-System).

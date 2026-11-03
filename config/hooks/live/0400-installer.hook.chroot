@@ -185,6 +185,34 @@ region: "${TIMEZONE%%/*}"
 zone: "${TIMEZONE#*/}"
 YAML
 
+# --- Installer-Symbol auf dem Live-Desktop ---------------------------------------
+# Debians Autostart-Skript legt das Symbol mitunter an, bevor der Desktop-Ordner
+# seinen deutschen Namen ("Schreibtisch") bekommt – dann fehlt es. Unser Skript
+# legt erst die Benutzerordner an und kopiert dann.
+rm -f /etc/xdg/autostart/calamares-desktop-icon.desktop
+install -d "/usr/libexec/${DISTRO_ID}"
+cat > "/usr/libexec/${DISTRO_ID}/live-installer-icon" <<'SH'
+#!/bin/sh
+# Nur im Live-System und nur, solange der Installer vorhanden ist
+grep -qw 'boot=live' /proc/cmdline || exit 0
+SRC=/usr/share/applications/calamares-install-debian.desktop
+[ -f "${SRC}" ] || exit 0
+xdg-user-dirs-update >/dev/null 2>&1 || true
+DESKTOP="$(xdg-user-dir DESKTOP)"
+mkdir -p "${DESKTOP}"
+cp "${SRC}" "${DESKTOP}/"
+chmod +x "${DESKTOP}/${SRC##*/}"
+SH
+chmod 755 "/usr/libexec/${DISTRO_ID}/live-installer-icon"
+cat > "/etc/xdg/autostart/${DISTRO_ID}-live-installer-icon.desktop" <<INI
+[Desktop Entry]
+Type=Application
+Name=${DISTRO_NAME}: Installer-Symbol
+Exec=/usr/libexec/${DISTRO_ID}/live-installer-icon
+NoDisplay=true
+X-KDE-autostart-phase=1
+INI
+
 # --- Startmenü-/Desktop-Eintrag "Debian installieren" umbenennen ------------
 for f in $(grep -l -i '^Exec=.*calamares' /usr/share/applications/*.desktop 2>/dev/null); do
 	sed -i -E \
