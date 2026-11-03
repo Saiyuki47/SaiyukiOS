@@ -149,7 +149,9 @@ sed -i \
 	-e 's|"Verify integrity of the boot medium"|"Startmedium auf Fehler prüfen"|' \
 	"${BL}/grub-pc/grub.cfg"
 sed -i 's|^set default=0|set default=0\nset timeout=10|' "${BL}/grub-pc/config.cfg"
-sed -i 's|^title-text:.*|title-text: ""|' "${BL}/grub-pc/live-theme/theme.txt"
+sed -i -e 's|^title-text:.*|title-text: ""|' \
+	-e 's|@TIMEOUT_NOTIFICATION_LONG@|Automatischer Start in %d Sekunden|' \
+	"${BL}/grub-pc/live-theme/theme.txt"
 
 # ISOLINUX (BIOS): gleiche Einträge; nur ASCII, da ISOLINUX kein UTF-8 kann
 cat > "${BL}/syslinux_common/live.cfg.in" <<SYSLINUX
@@ -173,7 +175,7 @@ label live-@FLAVOUR@-failsafe
 	append @APPEND_LIVE_FAILSAFE@
 SYSLINUX
 sed -i \
-	-e "s|^menu title Boot menu|menu title ${DISTRO_NAME} ${DISTRO_VERSION}|" \
+	-e '/^menu title Boot menu/d' \
 	-e 's|menu label ^Utilities|menu label ^Werkzeuge|' \
 	-e 's|menu title Utilities|menu title Werkzeuge|' \
 	-e 's|menu label ^Back..|menu label ^Zurueck|' \
@@ -183,6 +185,7 @@ sed -i \
 	-e "s|#76a1d0ff|${SEL}|g" \
 	-e 's|^menu vshift 12|menu vshift 14|' \
 	-e 's|^menu tabmsg .*|menu tabmsg ENTER: starten    TAB: Startoptionen bearbeiten|' \
+	-e '$a menu autoboot Automatischer Start in # Sekunden ...' \
 	"${BL}/syslinux_common/stdmenu.cfg"
 sed -i 's|^timeout 0|timeout 100|' "${BL}/isolinux/isolinux.cfg"
 
