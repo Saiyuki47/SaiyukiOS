@@ -171,8 +171,9 @@ chmod 755 "/usr/lib/live/config/1200-${DISTRO_ID}-live-session"
 
 # --- Konsole: eigenes Profil, begrüßt mit fastfetch und dem Blatt -----------
 cat > "/usr/libexec/${DISTRO_ID}-shell" <<'SH'
-#!/bin/sh
+#!/bin/bash
 # Startet die Standard-Shell, nachdem fastfetch das Systemlogo gezeigt hat.
+# (bash statt sh, damit fastfetch "Shell: bash" anzeigt)
 command -v fastfetch >/dev/null && fastfetch
 exec "${SHELL:-/bin/bash}"
 SH
