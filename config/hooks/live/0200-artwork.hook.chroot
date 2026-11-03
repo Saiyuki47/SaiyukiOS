@@ -78,10 +78,16 @@ if [ -d /usr/share/plymouth/themes/spinner ]; then
 	rm -rf "${T}"
 	cp -a /usr/share/plymouth/themes/spinner "${T}"
 	mv "${T}/spinner.plymouth" "${T}/${DISTRO_ID}.plymouth"
-	sed -i \
+	sed -i -E \
+		-e '/^(Name|Description)\[/d' \
 		-e "s|^Name=.*|Name=${DISTRO_NAME}|" \
 		-e "s|^Description=.*|Description=${DISTRO_NAME} Boot-Splash|" \
-		-e "s|/themes/spinner|/themes/${DISTRO_ID}|g" \
+		-e "s|^ImageDir=.*|ImageDir=/usr/share/plymouth/themes/${DISTRO_ID}|" \
+		-e 's|^Title=Installing Updates.*|Title=Updates werden installiert ...|' \
+		-e 's|^Title=Upgrading System.*|Title=System wird aktualisiert ...|' \
+		-e 's|^Title=Upgrading Firmware.*|Title=Firmware wird aktualisiert ...|' \
+		-e 's|^Title=Resetting System.*|Title=System wird zurückgesetzt ...|' \
+		-e 's|^SubTitle=Do not turn off your computer|SubTitle=Bitte den Computer nicht ausschalten|' \
 		"${T}/${DISTRO_ID}.plymouth"
 	cp "${B}/logo-128.png" "${T}/watermark.png"
 	# Hintergrundfarbe und Logo-Position im [two-step]-Abschnitt setzen
