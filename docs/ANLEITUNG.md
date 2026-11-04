@@ -79,6 +79,7 @@ einer Rückkehr unverändert bleiben.
   einen Schnappschuss an, die letzten 10 bleiben.
 - **Im Bootmenü:** Unter „SaiyukiOS-Schnappschüsse“ lässt sich jeder Stand starten.
   Änderungen laufen dabei in den Arbeitsspeicher und verschwinden beim Neustart.
+  Nach dem Anmelden erinnert ein Hinweis daran, dass gerade ein Schnappschuss läuft.
 - **Dauerhaft zurück:** *Btrfs Assistant → Snapper → Wiederherstellen*, danach
   neu starten.
 - Wer im Installer ext4 oder xfs wählt, bekommt keine Schnappschüsse. Die
@@ -86,8 +87,8 @@ einer Rückkehr unverändert bleiben.
 
 ## Weitere Funktionen
 
-- **Flathub:** Wird beim ersten Start mit Internet eingerichtet. Danach zeigt
-  Discover auch Flatpak-Programme.
+- **Flathub:** Wird eingerichtet, sobald Internet da ist (Versuch kurz nach dem
+  Start, dann alle 15 Minuten). Danach zeigt Discover auch Flatpak-Programme.
 - **Virtuelle Maschinen:** Bei der Installation bleiben nur die passenden
   Gast-Werkzeuge: `hyperv-daemons` (Hyper-V), `open-vm-tools` (VMware) oder
   `qemu-guest-agent` und `spice-vdagent` (QEMU/KVM). Für VirtualBox reichen die

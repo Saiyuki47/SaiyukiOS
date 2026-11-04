@@ -5,27 +5,46 @@ set -e
 G=/root/distro-build/grub-btrfs
 
 # --- Flathub ---------------------------------------------------------------------
-# Flathub wird beim ersten Start mit Internet eingerichtet (die Quelle samt
-# Schlüssel kommt direkt von flathub.org). Danach zeigt Discover auch
-# Flatpak-Programme an.
+# Flathub wird eingerichtet, sobald Internet da ist (die Quelle samt Schlüssel
+# kommt direkt von flathub.org). Danach zeigt Discover auch Flatpak-Programme an.
+# Ein Timer versucht es kurz nach dem Start und dann alle 15 Minuten – ohne
+# Internet endet der Versuch still statt mit einer Fehlermeldung beim Booten.
+install -d "/usr/libexec/${DISTRO_ID}"
+cat > "/usr/libexec/${DISTRO_ID}/flathub-setup" <<'SH'
+#!/bin/sh
+if flatpak remote-add --system --if-not-exists flathub \
+	https://dl.flathub.org/repo/flathub.flatpakrepo 2>/dev/null; then
+	echo "Flathub ist eingerichtet."
+else
+	echo "Flathub noch nicht erreichbar, neuer Versuch später."
+fi
+exit 0
+SH
+chmod 755 "/usr/libexec/${DISTRO_ID}/flathub-setup"
 cat > "/usr/lib/systemd/system/${DISTRO_ID}-flathub.service" <<UNIT
 [Unit]
 Description=${DISTRO_NAME}: Flathub als Flatpak-Quelle einrichten
 Wants=network-online.target
 After=network-online.target
 ConditionPathExists=!/var/lib/flatpak/repo/flathub.trustedkeys.gpg
-StartLimitIntervalSec=0
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
-Restart=on-failure
-RestartSec=120
+ExecStart=/usr/libexec/${DISTRO_ID}/flathub-setup
+UNIT
+cat > "/usr/lib/systemd/system/${DISTRO_ID}-flathub.timer" <<UNIT
+[Unit]
+Description=${DISTRO_NAME}: Flathub einrichten, sobald Internet da ist
+ConditionPathExists=!/var/lib/flatpak/repo/flathub.trustedkeys.gpg
+
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=15min
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=timers.target
 UNIT
-systemctl enable "${DISTRO_ID}-flathub.service"
+systemctl enable "${DISTRO_ID}-flathub.timer"
 
 # --- grub-btrfs: Schnappschüsse als Untermenü im Bootmenü --------------------------
 install -D -m 755 "${G}/41_snapshots-btrfs" /etc/grub.d/41_snapshots-btrfs
@@ -70,6 +89,42 @@ chmod 755 "/etc/initramfs-tools/scripts/local-bottom/${DISTRO_ID}-snapshot-overl
 # Overlay-Modul ins Initramfs
 grep -qx overlay /etc/initramfs-tools/modules 2>/dev/null || echo overlay >> /etc/initramfs-tools/modules
 
+# Im Schnappschuss-Modus (erkennbar an /run/snapshot/lower) haben diese Dienste
+# nichts zu tun und würden nur mit Fehlern enden: Snapper findet dort kein
+# .snapshots, und / ist ein Overlay statt der Btrfs-Einhängung aus der fstab.
+for unit in snapper-boot snapper-cleanup snapper-timeline grub-btrfsd systemd-remount-fs; do
+	install -d "/usr/lib/systemd/system/${unit}.service.d"
+	printf '[Unit]\nConditionPathIsMountPoint=!/run/snapshot/lower\n' \
+		> "/usr/lib/systemd/system/${unit}.service.d/50-${DISTRO_ID}-snapshot.conf"
+done
+
+# Hinweis nach dem Login, wenn ein Schnappschuss läuft
+cat > "/usr/libexec/${DISTRO_ID}/snapshot-notice" <<SH
+#!/bin/sh
+mountpoint -q /run/snapshot/lower || exit 0
+case "\${LANG}" in
+de*) kdialog --title "${DISTRO_NAME}: Schnappschuss" --msgbox "Du hast ${DISTRO_NAME} aus einem Schnappschuss gestartet.
+
+Änderungen am System gehen beim Neustart verloren. Deine eigenen Dateien (Persönlicher Ordner) bleiben unberührt.
+
+Dauerhaft zu diesem Stand zurück: Btrfs Assistant öffnen → Snapper → Schnappschuss auswählen → Wiederherstellen, danach neu starten." ;;
+*) kdialog --title "${DISTRO_NAME}: Snapshot" --msgbox "You started ${DISTRO_NAME} from a snapshot.
+
+System changes are lost on reboot. Your own files (home folder) are not affected.
+
+To go back to this state permanently: open Btrfs Assistant → Snapper → select the snapshot → Restore, then reboot." ;;
+esac
+SH
+chmod 755 "/usr/libexec/${DISTRO_ID}/snapshot-notice"
+cat > "/etc/xdg/autostart/${DISTRO_ID}-snapshot-notice.desktop" <<INI
+[Desktop Entry]
+Type=Application
+Name=${DISTRO_NAME}: Schnappschuss-Hinweis
+Exec=/usr/libexec/${DISTRO_ID}/snapshot-notice
+NoDisplay=true
+X-KDE-autostart-phase=2
+INI
+
 # --- Secure Boot: Erinnerung nach dem Login ------------------------------------------
 # Falls der Signaturschlüssel der NVIDIA-Module beim Neustart nicht bestätigt
 # wurde, laufen die Module unter Secure Boot nicht. Dann erscheint ein Hinweis.
@@ -80,12 +135,20 @@ cat > "/usr/libexec/${DISTRO_ID}/secureboot-check" <<SH
 command -v mokutil >/dev/null || exit 0
 mokutil --sb-state 2>/dev/null | grep -q enabled || exit 0
 mokutil --test-key /var/lib/dkms/mok.pub 2>/dev/null | grep -q "is already enrolled" && exit 0
-kdialog --title "${DISTRO_NAME}: Secure Boot" --sorry "Der NVIDIA-Treiber ist noch nicht aktiv: Secure Boot verlangt, dass sein Signaturschlüssel einmalig bestätigt wird.
+case "\${LANG}" in
+de*) kdialog --title "${DISTRO_NAME}: Secure Boot" --sorry "Der NVIDIA-Treiber ist noch nicht aktiv: Secure Boot verlangt, dass sein Signaturschlüssel einmalig bestätigt wird.
 
 So geht's:
 1. Im Terminal ausführen:  sudo ${DISTRO_ID}-nvidia-secureboot
 2. Neu starten. Auf dem blauen Bildschirm (MOK-Manager):
-   Enroll MOK → Continue → Yes → Passwort: ${MOK_PASSWORD} → Reboot"
+   Enroll MOK → Continue → Yes → Passwort: ${MOK_PASSWORD} → Reboot" ;;
+*) kdialog --title "${DISTRO_NAME}: Secure Boot" --sorry "The NVIDIA driver is not active yet: Secure Boot requires its signing key to be confirmed once.
+
+How to:
+1. Run in a terminal:  sudo ${DISTRO_ID}-nvidia-secureboot
+2. Reboot. On the blue screen (MOK manager):
+   Enroll MOK → Continue → Yes → password: ${MOK_PASSWORD} → Reboot" ;;
+esac
 SH
 chmod 755 "/usr/libexec/${DISTRO_ID}/secureboot-check"
 cat > "/etc/xdg/autostart/${DISTRO_ID}-secureboot-check.desktop" <<INI

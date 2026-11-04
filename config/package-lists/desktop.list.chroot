@@ -26,6 +26,8 @@ breeze-gtk-theme
 task-german
 task-german-desktop
 task-german-kde-desktop
+# Deutsche Tastatur auch auf der Textkonsole und bei der LUKS-Passwortabfrage
+console-setup
 
 # Aussehen und Boot-Splash
 fonts-noto-core

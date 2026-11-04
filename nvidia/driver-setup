@@ -187,6 +187,11 @@ if [ "${INSTALLER}" = 1 ]; then
 		run ${APT} autoremove --purge
 		run rm -rf /etc/grub.d/41_snapshots-btrfs /etc/default/grub-btrfs /usr/bin/grub-btrfsd \
 			/usr/lib/systemd/system/grub-btrfsd.service \
+			/usr/lib/systemd/system/grub-btrfsd.service.d \
+			/usr/lib/systemd/system/snapper-*.service.d \
+			/usr/lib/systemd/system/systemd-remount-fs.service.d/50-@ID@-snapshot.conf \
+			/etc/xdg/autostart/@ID@-snapshot-notice.desktop \
+			/usr/libexec/@ID@/snapshot-notice \
 			/etc/initramfs-tools/scripts/local-bottom/@ID@-snapshot-overlay
 	fi
 fi
