@@ -1,0 +1,8 @@
+# Secure Boot NICHT abschalten.
+#
+# shim-signed fragt bei der Einrichtung, ob die Signaturprüfung abgeschaltet
+# werden soll, sobald DKMS-Module (z. B. NVIDIA) vorhanden sind. Im Installer
+# gibt es niemanden, der antwortet: Mit Debians Vorgabe ("ja") bricht die
+# Paketeinrichtung dann ab und die Installation scheitert. SaiyukiOS signiert
+# die Module stattdessen mit einem eigenen Schlüssel (nvidia/secureboot).
+shim-signed-common shim/disable_secureboot boolean false
