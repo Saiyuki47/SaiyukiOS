@@ -11,7 +11,7 @@ if ! dpkg -s nvidia-kernel-open-dkms >/dev/null 2>&1; then
 fi
 
 # --- Treiberwahl: Erkennung, Live-Auswahl, Einrichtung bei der Installation ---
-subst() { sed -e "s|@ID@|${DISTRO_ID}|g" -e "s|@NAME@|${DISTRO_NAME}|g" "$1"; }
+subst() { sed -e "s|@ID@|${DISTRO_ID}|g" -e "s|@NAME@|${DISTRO_NAME}|g" -e "s|@MOK_PASSWORD@|${MOK_PASSWORD}|g" "$1"; }
 install -d "/usr/libexec/${DISTRO_ID}"
 subst "${N}/gpu-detect"   > "/usr/libexec/${DISTRO_ID}/gpu-detect"
 subst "${N}/gpu-select"   > "/usr/libexec/${DISTRO_ID}/gpu-select"
@@ -123,27 +123,7 @@ chmod 755 /usr/local/bin/prime-run
 # DKMS signiert die NVIDIA-Module mit einem Schlüssel aus /var/lib/dkms.
 # Der beim Image-Bau erzeugte private Schlüssel darf NICHT mit ausgeliefert
 # werden (sonst hätten alle Installationen denselben). Er wird in
-# 9900-cleanup entfernt; nach der Installation erzeugt dieser Helfer einen
-# eigenen Schlüssel und meldet ihn zur Registrierung an.
-cat > "/usr/local/sbin/${DISTRO_ID}-nvidia-secureboot" <<SH
-#!/bin/sh
-# ${DISTRO_NAME}: NVIDIA-Treiber für Secure Boot vorbereiten
-set -e
-[ "\$(id -u)" -eq 0 ] || exec sudo "\$0" "\$@"
-
-if [ ! -f /var/lib/dkms/mok.key ]; then
-	echo "Erzeuge einen neuen, nur für diesen Rechner gültigen Signaturschlüssel ..."
-	rm -f /var/lib/dkms/mok.pub
-fi
-echo "Baue und signiere die NVIDIA-Module neu ..."
-dkms autoinstall --force
-[ -f /var/lib/dkms/mok.pub ] || { echo "Kein Schlüssel entstanden – ist dkms aktuell?" >&2; exit 1; }
-
-echo
-echo "Jetzt wird nach einem Einmal-Passwort gefragt (frei wählbar, z. B. 12345678)."
-mokutil --import /var/lib/dkms/mok.pub
-echo
-echo "Fertig. Beim nächsten Neustart erscheint ein blauer Bildschirm (MOK-Manager):"
-echo "  'Enroll MOK' → 'Continue' → 'Yes' → Einmal-Passwort eingeben → 'Reboot'."
-SH
+# 9900-cleanup entfernt; bei der Installation erzeugt dieser Helfer einen
+# eigenen Schlüssel und meldet ihn zur Registrierung an (nvidia/secureboot).
+subst "${N}/secureboot" > "/usr/local/sbin/${DISTRO_ID}-nvidia-secureboot"
 chmod 755 "/usr/local/sbin/${DISTRO_ID}-nvidia-secureboot"

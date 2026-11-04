@@ -1,6 +1,11 @@
 #!/bin/sh
 # =====================================================================
-#  @NAME@: passenden Grafiktreiber einrichten, unnötige Treiber entfernen
+#  @NAME@: passende Treiber einrichten, Unnötiges entfernen
+#
+#   - Grafik: passender NVIDIA-Treiber oder keiner
+#   - Secure Boot: Signaturschlüssel für die NVIDIA-Module anmelden
+#   - Virtuelle Maschine: nur die passenden Gast-Werkzeuge behalten
+#   - Bei der Installation: Btrfs-Schnappschüsse einrichten
 #
 #  Läuft automatisch während der Installation und kann jederzeit erneut
 #  gestartet werden, z. B. nach dem Einbau einer anderen Grafikkarte:
@@ -11,11 +16,11 @@
 set -e
 [ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
 
-DRY=0
+DRY=0 INSTALLER=0
 for arg in "$@"; do
 	case "${arg}" in
 		--dry-run) DRY=1 ;;
-		--installer) ;;  # Aufruf aus dem Installer (Calamares)
+		--installer) INSTALLER=1 ;;  # Aufruf aus dem Installer (Calamares)
 		*) echo "Unbekannte Option: ${arg}" >&2; exit 2 ;;
 	esac
 done
@@ -133,6 +138,56 @@ esac
 # Zwischengespeicherte Ausweich-Pakete werden danach nicht mehr gebraucht
 run rm -rf "${CACHE}"
 echo "Grafiktreiber eingerichtet: ${CHOICE}"
-[ "${CHOICE}" = "legacy" ] || [ "${CHOICE}" = "open" ] && \
-	echo "Hinweis: Bei aktivem Secure Boot einmal 'sudo @ID@-nvidia-secureboot' ausführen."
+
+# --- Secure Boot ------------------------------------------------------------------
+if [ "${CHOICE}" = "legacy" ] || [ "${CHOICE}" = "open" ]; then
+	run /usr/local/sbin/@ID@-nvidia-secureboot || \
+		echo "Hinweis: Secure Boot ließ sich nicht einrichten – später 'sudo @ID@-nvidia-secureboot' ausführen."
+fi
+
+# --- Virtuelle Maschine: nur die passenden Gast-Werkzeuge behalten -------------------
+VIRT="$(systemd-detect-virt --vm 2>/dev/null || true)"
+case "${VIRT}" in
+	microsoft) KEEP="hyperv-daemons";                       VIRT_NAME="Hyper-V" ;;
+	vmware)    KEEP="open-vm-tools open-vm-tools-desktop";  VIRT_NAME="VMware" ;;
+	kvm|qemu)  KEEP="qemu-guest-agent spice-vdagent";       VIRT_NAME="QEMU/KVM" ;;
+	oracle)    KEEP="";  VIRT_NAME="VirtualBox (Treiber im Kernel enthalten)" ;;
+	*)         KEEP="";  VIRT_NAME="keine (echte Hardware)" ;;
+esac
+echo "Virtuelle Maschine: ${VIRT_NAME}"
+DROP=""
+for pkg in hyperv-daemons open-vm-tools open-vm-tools-desktop qemu-guest-agent spice-vdagent; do
+	case " ${KEEP} " in *" ${pkg} "*) continue ;; esac
+	[ -z "$(installed "${pkg}")" ] || DROP="${DROP} ${pkg}"
+done
+if [ -n "${DROP}" ]; then
+	echo "Entferne nicht benötigte Gast-Werkzeuge:${DROP}"
+	# shellcheck disable=SC2086
+	run ${APT} purge ${DROP}
+fi
+run ${APT} autoremove --purge
+
+# --- Btrfs-Schnappschüsse (nur bei der Installation) ----------------------------------
+if [ "${INSTALLER}" = 1 ]; then
+	if [ "$(findmnt -n -o FSTYPE /)" = "btrfs" ]; then
+		echo "Richte Btrfs-Schnappschüsse ein (Snapper, grub-btrfs) ..."
+		if [ ! -f /etc/snapper/configs/root ]; then
+			run snapper --no-dbus -c root create-config /
+			# Keine stündlichen Schnappschüsse; dazu automatisch vor/nach jedem Update (apt)
+			run sed -i -e 's/^TIMELINE_CREATE=.*/TIMELINE_CREATE="no"/' \
+				-e 's/^NUMBER_LIMIT=.*/NUMBER_LIMIT="10"/' \
+				-e 's/^NUMBER_LIMIT_IMPORTANT=.*/NUMBER_LIMIT_IMPORTANT="5"/' /etc/snapper/configs/root
+		fi
+		run snapper --no-dbus -c root create --description "Nach der Installation" --userdata important=yes
+		run systemctl enable grub-btrfsd.service snapper-cleanup.timer
+		run update-grub
+	else
+		echo "Kein Btrfs: Schnappschuss-Werkzeuge werden nicht gebraucht."
+		run ${APT} purge snapper btrfs-assistant
+		run ${APT} autoremove --purge
+		run rm -rf /etc/grub.d/41_snapshots-btrfs /etc/default/grub-btrfs /usr/bin/grub-btrfsd \
+			/usr/lib/systemd/system/grub-btrfsd.service \
+			/etc/initramfs-tools/scripts/local-bottom/@ID@-snapshot-overlay
+	fi
+fi
 exit 0

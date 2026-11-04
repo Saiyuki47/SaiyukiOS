@@ -62,6 +62,8 @@ import calamares.slideshow 1.0;
 Presentation
 {
     id: presentation
+    // Deutsch oder Englisch – je nach Sprache des Live-Systems
+    property bool de: Qt.locale().name.substring(0, 2) === "de"
 
     Timer {
         interval: 15000
@@ -85,7 +87,7 @@ Presentation
             horizontalAlignment: Text.Center
             wrapMode: Text.WordWrap
             color: "#FFFFFF"; font.pixelSize: 22
-            text: "Willkommen bei ${DISTRO_NAME} ${DISTRO_VERSION}<br/><small>${DISTRO_TAGLINE}</small>"
+            text: presentation.de ? "Willkommen bei ${DISTRO_NAME} ${DISTRO_VERSION}<br/><small>${DISTRO_TAGLINE}</small>" : "Welcome to ${DISTRO_NAME} ${DISTRO_VERSION}<br/><small>Simple. Fast. Yours.</small>"
         }
     }
 
@@ -97,7 +99,7 @@ Presentation
             horizontalAlignment: Text.Center
             wrapMode: Text.WordWrap
             color: "#FFFFFF"; font.pixelSize: 20
-            text: "KDE Plasma unter Wayland<br/><br/><small>Ein moderner, flüssiger Desktop mit Dolphin als Dateimanager. Unter <i>Systemeinstellungen</i> passt du alles an.</small>"
+            text: presentation.de ? "Bereit für NVIDIA<br/><br/><small>Der passende NVIDIA-Treiber wird gerade eingerichtet, unnötige Treiber werden entfernt. Laptops mit zwei Grafikchips starten Programme per Rechtsklick auf der dedizierten Karte.</small>" : "Ready for NVIDIA<br/><br/><small>The right NVIDIA driver is being set up and unneeded drivers are removed. Laptops with two GPUs start programs on the dedicated card via right-click.</small>"
         }
     }
 
@@ -109,7 +111,7 @@ Presentation
             horizontalAlignment: Text.Center
             wrapMode: Text.WordWrap
             color: "#FFFFFF"; font.pixelSize: 20
-            text: "Bereit für NVIDIA<br/><br/><small>Der NVIDIA-Treiber ist bereits installiert und für Wayland eingerichtet. Laptops mit zwei Grafikchips starten Programme per Rechtsklick auf der dedizierten Karte.</small>"
+            text: presentation.de ? "Zurück per Bootmenü<br/><br/><small>Vor jedem Update entsteht automatisch ein Schnappschuss. Geht etwas schief, wählst du ihn im Bootmenü unter „${DISTRO_NAME}-Schnappschüsse“. Dauerhaft zurück: Btrfs Assistant.</small>" : "Roll back from the boot menu<br/><br/><small>A snapshot is taken automatically before every update. If something breaks, pick it in the boot menu under “${DISTRO_NAME}-Schnappschüsse”. To go back for good: Btrfs Assistant.</small>"
         }
     }
 
@@ -121,7 +123,19 @@ Presentation
             horizontalAlignment: Text.Center
             wrapMode: Text.WordWrap
             color: "#FFFFFF"; font.pixelSize: 20
-            text: "Über 60.000 Programme<br/><br/><small>${DISTRO_NAME} basiert auf Debian. Mit Discover oder <tt>sudo apt install</tt> installierst du alles, was Debian anbietet – inklusive Sicherheitsupdates.</small>"
+            text: presentation.de ? "Aktuelle Programme mit Flathub<br/><br/><small>Debian ist stabil, Flathub ist aktuell: In Discover findest du beides – z. B. Steam, Discord oder OBS.</small>" : "Up-to-date apps with Flathub<br/><br/><small>Debian is stable, Flathub is current: Discover offers both – e.g. Steam, Discord or OBS.</small>"
+        }
+    }
+
+    Slide {
+        Rectangle { anchors.fill: parent; color: "${COLOR_DARK}" }
+        Text {
+            anchors.centerIn: parent
+            width: parent.width - 80
+            horizontalAlignment: Text.Center
+            wrapMode: Text.WordWrap
+            color: "#FFFFFF"; font.pixelSize: 20
+            text: presentation.de ? "Secure Boot<br/><br/><small>Ist Secure Boot aktiv, erscheint beim ersten Neustart ein blauer Bildschirm: Enroll MOK → Continue → Yes → Passwort ${MOK_PASSWORD}.</small>" : "Secure Boot<br/><br/><small>If Secure Boot is on, a blue screen appears on first reboot: Enroll MOK → Continue → Yes → password ${MOK_PASSWORD}.</small>"
         }
     }
 
@@ -132,51 +146,127 @@ QML
 
 sed -i -E "s|^branding:.*|branding: ${DISTRO_ID}|" "${CAL}/settings.conf"
 
-# --- Grafiktreiber während der Installation einrichten ----------------------------
-# Eigener Calamares-Schritt: erkennt die Grafikkarte, behält nur den passenden
-# NVIDIA-Treiber und entfernt alle unnötigen (siehe nvidia/driver-setup).
-if [ -x "/usr/sbin/${DISTRO_ID}-driver-setup" ]; then
-	GPU_ID="${DISTRO_ID}gpu"
-	cat > "${CAL}/modules/shellprocess_${GPU_ID}.conf" <<YAML
----
-dontChroot: false
-timeout: 1800
-script:
-    - command: "/usr/sbin/${DISTRO_ID}-driver-setup --installer"
-      timeout: 1800
-i18n:
-    name: "Grafiktreiber einrichten"
-YAML
-	S="${CAL}/settings.conf"
-	if grep -q "shellprocess@${GPU_ID}" "${S}"; then
-		echo "Calamares: Schritt ${GPU_ID} ist schon eingereiht."
-	else
+# --- Eigene Installer-Schritte ---------------------------------------------------
+# add_step <id> <Konfiguration>: Calamares-Schritt (shellprocess) anlegen und
+# im Ablauf vor "initramfs" (sonst vor "bootloader") einreihen.
+S="${CAL}/settings.conf"
+add_step() {
+	id="$1"
+	printf '%s\n' "$2" > "${CAL}/modules/shellprocess_${id}.conf"
+	if grep -q "shellprocess@${id}" "${S}"; then
+		echo "Calamares: Schritt ${id} ist schon eingereiht."
+		return 0
+	fi
 	# 1) Instanz anmelden (Einrückung der vorhandenen Einträge übernehmen)
 	if grep -q '^instances:' "${S}"; then
-		awk -v id="${GPU_ID}" '
+		awk -v id="${id}" '
 			{ print }
 			/^instances:/ && !done { getline nxt; ind = nxt; sub(/-.*/, "", ind)
 				printf "%s- id:       %s\n%s  module:   shellprocess\n%s  config:   shellprocess_%s.conf\n", ind, id, ind, ind, id
 				print nxt; done = 1 }' "${S}" > "${S}.new"
 	else
-		awk -v id="${GPU_ID}" '
+		awk -v id="${id}" '
 			/^sequence:/ && !done { printf "instances:\n- id:       %s\n  module:   shellprocess\n  config:   shellprocess_%s.conf\n\n", id, id; done = 1 }
 			{ print }' "${S}" > "${S}.new"
 	fi
 	mv "${S}.new" "${S}"
-	# 2) In den Ablauf einreihen: vor "initramfs" (sonst vor "bootloader")
+	# 2) In den Ablauf einreihen
 	for before in initramfs bootloader; do
 		if grep -qE "^[[:space:]]*- ${before}[[:space:]]*\$" "${S}"; then
-			awk -v id="${GPU_ID}" -v b="${before}" '
+			awk -v id="${id}" -v b="${before}" '
 				$0 ~ "^[[:space:]]*- " b "[[:space:]]*$" && !done { ind = $0; sub(/-.*/, "", ind); print ind "- shellprocess@" id; done = 1 }
 				{ print }' "${S}" > "${S}.new"
 			mv "${S}.new" "${S}"
 			break
 		fi
 	done
-	fi
-	grep -q "shellprocess@${GPU_ID}" "${S}" || { echo "Calamares: Schritt für Grafiktreiber konnte nicht eingereiht werden" >&2; exit 1; }
+	grep -q "shellprocess@${id}" "${S}" || { echo "Calamares: Schritt ${id} konnte nicht eingereiht werden" >&2; exit 1; }
+}
+
+if [ -x "/usr/sbin/${DISTRO_ID}-driver-setup" ]; then
+	# Treiber, Gast-Werkzeuge, Secure Boot, Schnappschüsse (nvidia/driver-setup)
+	add_step "${DISTRO_ID}setup" "---
+dontChroot: false
+timeout: 3600
+script:
+    - command: \"/usr/sbin/${DISTRO_ID}-driver-setup --installer\"
+      timeout: 3600
+i18n:
+    name: \"Setting up drivers and system\"
+    name[de]: \"Treiber und System einrichten\""
+
+	# Hinweis zum Secure-Boot-Passwort – läuft im Live-System, damit das
+	# Fenster auf dem Bildschirm erscheint (nur wenn ein Schlüssel angemeldet wurde)
+	install -d "/usr/libexec/${DISTRO_ID}"
+	cat > "/usr/libexec/${DISTRO_ID}/secureboot-notice" <<SH
+#!/bin/sh
+F="\$1/var/lib/${DISTRO_ID}/mok-pending"
+[ -f "\${F}" ] || exit 0
+PW="\$(cat "\${F}")"
+rm -f "\${F}"
+kdialog --title "${DISTRO_NAME}: Secure Boot" --msgbox "Secure Boot ist aktiv: Der NVIDIA-Treiber wurde mit einem eigenen Schlüssel dieses Rechners signiert. Er muss beim nächsten Neustart einmalig bestätigt werden.
+
+Beim Neustart erscheint ein blauer Bildschirm (MOK-Manager). Innerhalb von 10 Sekunden eine Taste drücken, dann:
+
+    Enroll MOK  →  Continue  →  Yes
+    Passwort:  \${PW}
+    →  Reboot
+
+Verpasst? Kein Problem – nach dem Login erscheint ein Hinweis, wie es weitergeht." || true
+exit 0
+SH
+	chmod 755 "/usr/libexec/${DISTRO_ID}/secureboot-notice"
+	add_step "${DISTRO_ID}sbnotice" "---
+dontChroot: true
+timeout: 3600
+script:
+    - command: \"-/usr/libexec/${DISTRO_ID}/secureboot-notice \${ROOT}\"
+      timeout: 3600
+i18n:
+    name: \"Secure Boot\""
 fi
+
+# --- Btrfs als Standard, mit Subvolumes für Schnappschüsse ---------------------------
+# @ = System (wird gesichert), @home/@cache/@log bleiben bei einer Rückkehr unverändert
+cat > "${CAL}/modules/partition.conf" <<YAML
+---
+efi:
+    mountPoint: "/boot/efi"
+    recommendedSize: 300MiB
+    minimumSize: 32MiB
+userSwapChoices:
+    - none
+    - small
+    - suspend
+    - file
+initialSwapChoice: small
+defaultFileSystemType: "btrfs"
+availableFileSystemTypes: ["btrfs", "ext4", "xfs"]
+luksGeneration: luks1
+drawNestedPartitions: false
+alwaysShowPartitionLabels: true
+initialPartitioningChoice: none
+YAML
+grep -q '^btrfsSubvolumes:' "${CAL}/modules/mount.conf" || cat >> "${CAL}/modules/mount.conf" <<YAML
+
+btrfsSubvolumes:
+    - mountPoint: /
+      subvolume: /@
+    - mountPoint: /home
+      subvolume: /@home
+    - mountPoint: /var/cache
+      subvolume: /@cache
+    - mountPoint: /var/log
+      subvolume: /@log
+btrfsSwapSubvol: /@swap
+mountOptions:
+    - filesystem: default
+      options: [ defaults ]
+    - filesystem: efi
+      options: [ defaults, umask=0077 ]
+    - filesystem: btrfs
+      options: [ defaults, noatime, compress=zstd:1 ]
+YAML
 
 # --- Zeitzone vorbelegen (Debian liefert keine locale.conf mit) -------------
 cat > "${CAL}/modules/locale.conf" <<YAML
@@ -217,9 +307,9 @@ INI
 for f in $(grep -l -i '^Exec=.*calamares' /usr/share/applications/*.desktop 2>/dev/null); do
 	sed -i -E \
 		-e '/^(Name|GenericName|Comment)\[/d' \
-		-e "s|^Name=.*|Name=${DISTRO_NAME} installieren|" \
-		-e "s|^GenericName=.*|GenericName=Installationsprogramm|" \
-		-e "s|^Comment=.*|Comment=${DISTRO_NAME} dauerhaft auf diesem Computer installieren|" \
+		-e "s|^Name=.*|Name=Install ${DISTRO_NAME}\nName[de]=${DISTRO_NAME} installieren|" \
+		-e "s|^GenericName=.*|GenericName=Installer\nGenericName[de]=Installationsprogramm|" \
+		-e "s|^Comment=.*|Comment=Install ${DISTRO_NAME} on this computer\nComment[de]=${DISTRO_NAME} dauerhaft auf diesem Computer installieren|" \
 		-e "s|^Icon=.*|Icon=${DISTRO_ID}-logo|" \
 		"${f}"
 done

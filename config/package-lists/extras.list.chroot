@@ -1,0 +1,22 @@
+# Flatpak mit Flathub in Discover (aktuelle Programme auf stabilem Debian)
+flatpak
+plasma-discover-backend-flatpak
+kde-config-flatpak
+
+# Btrfs-Schnappschüsse: automatisch vor/nach jedem Update, im Bootmenü wählbar
+btrfs-progs
+snapper
+btrfs-assistant
+inotify-tools
+
+# Gast-Werkzeuge für virtuelle Maschinen. Bei der Installation bleibt nur das
+# passende (Hyper-V, VMware, QEMU/KVM), auf echter Hardware keines.
+hyperv-daemons
+open-vm-tools
+open-vm-tools-desktop
+qemu-guest-agent
+spice-vdagent
+
+# Secure Boot für die NVIDIA-Module
+mokutil
+kdialog

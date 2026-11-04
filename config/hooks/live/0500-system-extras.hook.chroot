@@ -1,0 +1,98 @@
+#!/bin/sh
+# Flathub, Btrfs-Schnappschüsse im Bootmenü und Secure-Boot-Hinweis.
+set -e
+. /root/distro-build/distro.conf
+G=/root/distro-build/grub-btrfs
+
+# --- Flathub ---------------------------------------------------------------------
+# Flathub wird beim ersten Start mit Internet eingerichtet (die Quelle samt
+# Schlüssel kommt direkt von flathub.org). Danach zeigt Discover auch
+# Flatpak-Programme an.
+cat > "/usr/lib/systemd/system/${DISTRO_ID}-flathub.service" <<UNIT
+[Unit]
+Description=${DISTRO_NAME}: Flathub als Flatpak-Quelle einrichten
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/var/lib/flatpak/repo/flathub.trustedkeys.gpg
+StartLimitIntervalSec=0
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+Restart=on-failure
+RestartSec=120
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+systemctl enable "${DISTRO_ID}-flathub.service"
+
+# --- grub-btrfs: Schnappschüsse als Untermenü im Bootmenü --------------------------
+install -D -m 755 "${G}/41_snapshots-btrfs" /etc/grub.d/41_snapshots-btrfs
+install -D -m 644 "${G}/config" /etc/default/grub-btrfs/config
+install -D -m 744 "${G}/grub-btrfsd" /usr/bin/grub-btrfsd
+install -D -m 644 "${G}/grub-btrfsd.service" /usr/lib/systemd/system/grub-btrfsd.service
+install -D -m 644 "${G}/LICENSE" /usr/share/doc/grub-btrfs/copyright
+cat >> /etc/default/grub-btrfs/config <<CFG
+
+# ${DISTRO_NAME}
+GRUB_BTRFS_SUBMENUNAME="${DISTRO_NAME}-Schnappschüsse"
+GRUB_BTRFS_LIMIT="15"
+CFG
+# grub-btrfsd wird erst bei einer Installation auf Btrfs aktiviert (driver-setup).
+
+# Schnappschüsse sind schreibgeschützt. Startet man einen über das Bootmenü,
+# legt dieses Initramfs-Skript ein beschreibbares Overlay im RAM darüber –
+# das System läuft normal, Änderungen verschwinden beim Neustart. Dauerhaft
+# zurückkehren: Btrfs Assistant → Snapper → Wiederherstellen.
+install -d /etc/initramfs-tools/scripts/local-bottom
+cat > "/etc/initramfs-tools/scripts/local-bottom/${DISTRO_ID}-snapshot-overlay" <<'SH'
+#!/bin/sh
+PREREQ=""
+prereqs() { echo "${PREREQ}"; }
+case "$1" in prereqs) prereqs; exit 0 ;; esac
+
+# Nur beim Start eines Snapper-Schnappschusses (rootflags=subvol=.../.snapshots/N/snapshot)
+case "$(cat /proc/cmdline)" in *subvol=*.snapshots/*) ;; *) exit 0 ;; esac
+command -v btrfs >/dev/null 2>&1 || exit 0
+[ "$(btrfs property get "${rootmnt}" ro 2>/dev/null)" = "ro=true" ] || exit 0
+
+modprobe overlay 2>/dev/null || true
+mkdir -p /run/snapshot/lower /run/snapshot/rw
+mount --move "${rootmnt}" /run/snapshot/lower
+mount -t tmpfs -o mode=0755 snapshot-rw /run/snapshot/rw
+mkdir -p /run/snapshot/rw/upper /run/snapshot/rw/work
+mount -t overlay -o lowerdir=/run/snapshot/lower,upperdir=/run/snapshot/rw/upper,workdir=/run/snapshot/rw/work \
+	snapshot "${rootmnt}"
+echo "Schnappschuss gestartet: Änderungen bleiben nur bis zum Neustart erhalten."
+SH
+chmod 755 "/etc/initramfs-tools/scripts/local-bottom/${DISTRO_ID}-snapshot-overlay"
+# Overlay-Modul ins Initramfs
+grep -qx overlay /etc/initramfs-tools/modules 2>/dev/null || echo overlay >> /etc/initramfs-tools/modules
+
+# --- Secure Boot: Erinnerung nach dem Login ------------------------------------------
+# Falls der Signaturschlüssel der NVIDIA-Module beim Neustart nicht bestätigt
+# wurde, laufen die Module unter Secure Boot nicht. Dann erscheint ein Hinweis.
+install -d "/usr/libexec/${DISTRO_ID}"
+cat > "/usr/libexec/${DISTRO_ID}/secureboot-check" <<SH
+#!/bin/sh
+[ -f /var/lib/dkms/mok.pub ] || exit 0
+command -v mokutil >/dev/null || exit 0
+mokutil --sb-state 2>/dev/null | grep -q enabled || exit 0
+mokutil --test-key /var/lib/dkms/mok.pub 2>/dev/null | grep -q "is already enrolled" && exit 0
+kdialog --title "${DISTRO_NAME}: Secure Boot" --sorry "Der NVIDIA-Treiber ist noch nicht aktiv: Secure Boot verlangt, dass sein Signaturschlüssel einmalig bestätigt wird.
+
+So geht's:
+1. Im Terminal ausführen:  sudo ${DISTRO_ID}-nvidia-secureboot
+2. Neu starten. Auf dem blauen Bildschirm (MOK-Manager):
+   Enroll MOK → Continue → Yes → Passwort: ${MOK_PASSWORD} → Reboot"
+SH
+chmod 755 "/usr/libexec/${DISTRO_ID}/secureboot-check"
+cat > "/etc/xdg/autostart/${DISTRO_ID}-secureboot-check.desktop" <<INI
+[Desktop Entry]
+Type=Application
+Name=${DISTRO_NAME}: Secure-Boot-Prüfung
+Exec=/usr/libexec/${DISTRO_ID}/secureboot-check
+NoDisplay=true
+X-KDE-autostart-phase=2
+INI

@@ -62,10 +62,38 @@ ein. Die nötigen Pakete stecken schon im Image.
 - **Laptops mit zwei Grafikchips (Optimus):** In Plasma per Rechtsklick
   „Mit dedizierter Grafikkarte starten“ wählen oder im Terminal
   `prime-run programm` eingeben.
-- **Secure Boot:** Selbst kompilierte Module müssen signiert sein. Nach der
-  Installation einmal `sudo saiyukios-nvidia-secureboot` ausführen und beim
-  Neustart den Schlüssel bestätigen. Alternativ Secure Boot abschalten.
+- **Secure Boot:** Selbst kompilierte Module müssen signiert sein. Der Installer
+  erzeugt dafür einen Schlüssel für diesen Rechner und meldet ihn an. Beim ersten
+  Neustart erscheint ein blauer Bildschirm (MOK-Manager): *Enroll MOK → Continue
+  → Yes → Passwort `saiyukios` → Reboot*. Verpasst? Nach dem Login erscheint ein
+  Hinweis; `sudo saiyukios-nvidia-secureboot` meldet den Schlüssel erneut an.
 - **Diagnose:** `nvidia-smi`, `nvtop`, `vulkaninfo --summary`.
+
+## Schnappschüsse
+
+Der Installer legt das System standardmäßig auf **Btrfs** an, aufgeteilt in
+Subvolumes: `@` für das System, dazu `@home`, `@cache` und `@log`, die bei
+einer Rückkehr unverändert bleiben.
+
+- **Automatisch:** Snapper legt vor und nach jedem Update per apt bzw. Discover
+  einen Schnappschuss an, die letzten 10 bleiben.
+- **Im Bootmenü:** Unter „SaiyukiOS-Schnappschüsse“ lässt sich jeder Stand starten.
+  Änderungen laufen dabei in den Arbeitsspeicher und verschwinden beim Neustart.
+- **Dauerhaft zurück:** *Btrfs Assistant → Snapper → Wiederherstellen*, danach
+  neu starten.
+- Wer im Installer ext4 oder xfs wählt, bekommt keine Schnappschüsse. Die
+  Werkzeuge dafür werden dann entfernt.
+
+## Weitere Funktionen
+
+- **Flathub:** Wird beim ersten Start mit Internet eingerichtet. Danach zeigt
+  Discover auch Flatpak-Programme.
+- **Virtuelle Maschinen:** Bei der Installation bleiben nur die passenden
+  Gast-Werkzeuge: `hyperv-daemons` (Hyper-V), `open-vm-tools` (VMware) oder
+  `qemu-guest-agent` und `spice-vdagent` (QEMU/KVM). Für VirtualBox reichen die
+  Treiber im Kernel.
+- **Englisch:** Im Bootmenü „SaiyukiOS Live (English)“ wählen. Live-System und
+  Installer sind dann englisch, mit US-Tastatur.
 
 ## Bauen
 

@@ -23,7 +23,7 @@ VOLUME="${DISTRO_NAME} ${DISTRO_VERSION}"
 [ "${#VOLUME}" -le 32 ] || die "\"${VOLUME}\" ist zu lang für das ISO-Label (max. 32 Zeichen)."
 
 # --- Werkzeuge ------------------------------------------------------------
-NEEDED="live-build apt-utils librsvg2-bin fonts-cantarell fonts-dejavu-core curl ca-certificates gnupg"
+NEEDED="live-build apt-utils librsvg2-bin fonts-cantarell fonts-dejavu-core curl ca-certificates gnupg git"
 MISSING=""
 for p in ${NEEDED}; do
 	dpkg-query -W -f='${Status}' "${p}" 2>/dev/null | grep -q "install ok installed" || MISSING="${MISSING} ${p}"
@@ -49,6 +49,8 @@ rm -rf "${STAGE}"
 mkdir -p "${STAGE}"
 cp distro.conf "${STAGE}/distro.conf"
 cp -r nvidia "${STAGE}/nvidia"
+git clone -q --depth 1 --branch "${GRUB_BTRFS_VERSION}" https://github.com/Antynea/grub-btrfs "${STAGE}/grub-btrfs" \
+	|| die "grub-btrfs ${GRUB_BTRFS_VERSION} konnte nicht geladen werden"
 branding/render.sh "${STAGE}/branding"
 
 # --- live-build konfigurieren -------------------------------------------
@@ -124,11 +126,17 @@ cp "${STAGE}/branding/splash640.png" "${BL}/isolinux/splash.png"
 
 # Notfall-Eintrag: NVIDIA-Treiber sperren, freien Treiber nouveau verwenden
 GPU_NOUVEAU="modprobe.blacklist=nvidia,nvidia_drm,nvidia_modeset,nvidia_uvm ${DISTRO_ID}.gpu=nouveau"
+# Zweitsprache: Live-System und Installer auf Englisch (überschreibt die Vorgaben)
+ENGLISH="locales=en_US.UTF-8 keyboard-layouts=us timezone=Etc/UTC"
 
 # GRUB: eigene Einträge statt der automatisch erzeugten "Live system (amd64)"
 cat > "${BL}/grub-pc/live-entries.cfg" <<GRUB
 menuentry "${DISTRO_NAME} Live" --hotkey=l {
 	linux	@KERNEL_LIVE@ @APPEND_LIVE@
+	initrd	@INITRD_LIVE@
+}
+menuentry "${DISTRO_NAME} Live (English)" {
+	linux	@KERNEL_LIVE@ @APPEND_LIVE@ ${ENGLISH}
 	initrd	@INITRD_LIVE@
 }
 menuentry "${DISTRO_NAME} Live – Open-Source-Grafiktreiber (nouveau)" --hotkey=n {
@@ -164,6 +172,12 @@ label live-@FLAVOUR@
 	linux @LINUX@
 	initrd @INITRD@
 	append @APPEND_LIVE@
+
+label live-@FLAVOUR@-english
+	menu label ${DISTRO_NAME} Live (^English)
+	linux @LINUX@
+	initrd @INITRD@
+	append @APPEND_LIVE@ ${ENGLISH}
 
 label live-@FLAVOUR@-nouveau
 	menu label ${DISTRO_NAME} Live - ^Open-Source-Grafiktreiber (nouveau)

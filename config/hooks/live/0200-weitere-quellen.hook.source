@@ -1,0 +1,11 @@
+#!/bin/sh
+# Quellcode von Komponenten, die nicht aus Debian-Paketen stammen:
+# grub-btrfs (GPL-3, github.com/Antynea/grub-btrfs). Läuft im Ordner source/.
+set -e
+. ../distro.conf
+SRC=../config/includes.chroot_after_packages/root/distro-build/grub-btrfs
+[ -d "${SRC}" ] || exit 0
+mkdir -p debian/extra
+tar czf "debian/extra/grub-btrfs-${GRUB_BTRFS_VERSION}.tar.gz" --exclude=.git \
+	-C "$(dirname "${SRC}")" "$(basename "${SRC}")"
+echo "  grub-btrfs ${GRUB_BTRFS_VERSION}"

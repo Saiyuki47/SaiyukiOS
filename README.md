@@ -25,15 +25,18 @@
 ## Was macht SaiyukiOS einzigartig?
 
 - **NVIDIA ohne Handarbeit:** Erkennt die Grafikkarte und richtet den passenden
-  Treiber ein. RTX 20 bis RTX 50 bekommen NVIDIAs aktuellen Treiber, GTX 750 bis
-  1080 Debians Treiber 550, auch ohne Internet. Unnötige Treiber werden bei der
-  Installation automatisch entfernt.
-- **Wayland von Anfang an:** KDE Plasma 6 und der Anmeldebildschirm laufen unter
-  Wayland. NVIDIA ist dafür vorbereitet: Modesetting, Standby ohne schwarzen
-  Bildschirm, `prime-run` für Laptops mit zwei Grafikchips.
-- **Debian als Fundament:** Stabil, mit Sicherheitsupdates und über 60.000 Paketen.
+  Treiber ein, für Wayland vorbereitet. RTX 20 bis RTX 50 bekommen NVIDIAs aktuellen
+  Treiber, GTX 750 bis 1080 Debians Treiber 550, auch ohne Internet. Mit Secure Boot
+  wird der Schlüssel bei der Installation angemeldet, beim Neustart nur bestätigen.
+- **Nur, was die Hardware braucht:** Unnötige Grafiktreiber fliegen bei der
+  Installation raus. In Hyper-V, VMware oder QEMU bleiben die passenden
+  Gast-Werkzeuge, auf echter Hardware keine.
+- **Zurück per Bootmenü:** Vor jedem Update entsteht ein Btrfs-Schnappschuss. Geht
+  etwas schief, startest du den alten Stand direkt aus dem Bootmenü.
+- **Stabil und trotzdem aktuell:** Debian 13 als Fundament, dazu Flathub in Discover
+  für aktuelle Programme.
 - **Eigenes Gesicht:** Das Blatt zieht sich durch alles, von Bootmenü, Startbildschirm
   und Anmeldung bis zum Terminal.
-- **Deutsch ab Werk:** Sprache, Tastatur und Zeitzone sind vorbelegt.
+- **Deutsch ab Werk:** Englisch gibt es per Eintrag im Bootmenü.
 
 Bauen, Testen und Anpassen: [Anleitung](docs/ANLEITUNG.md)

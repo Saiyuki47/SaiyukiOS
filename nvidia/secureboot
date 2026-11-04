@@ -1,0 +1,53 @@
+#!/bin/sh
+# =====================================================================
+#  @NAME@: NVIDIA-Treiber für Secure Boot einrichten
+#
+#  Unter Secure Boot lädt der Kernel nur signierte Module. DKMS signiert die
+#  NVIDIA-Module mit einem eigenen Schlüssel dieses Rechners; dieser muss
+#  einmalig in der Firmware registriert werden (MOK = Machine Owner Key).
+#
+#  Läuft automatisch bei der Installation; von Hand:
+#    sudo @ID@-nvidia-secureboot
+# =====================================================================
+set -e
+[ "$(id -u)" -eq 0 ] || exec sudo "$0" "$@"
+
+PASSWORD="@MOK_PASSWORD@"
+KEY=/var/lib/dkms/mok.key
+PUB=/var/lib/dkms/mok.pub
+
+if ! mokutil --sb-state 2>/dev/null | grep -q enabled; then
+	echo "Secure Boot ist ausgeschaltet – nichts zu tun."
+	exit 0
+fi
+if ! dkms status 2>/dev/null | grep -q '^nvidia'; then
+	echo "Kein NVIDIA-Treiber installiert – nichts zu tun."
+	exit 0
+fi
+if [ -f "${PUB}" ] && mokutil --test-key "${PUB}" 2>/dev/null | grep -q "already enrolled"; then
+	echo "Der Signaturschlüssel ist bereits registriert."
+	exit 0
+fi
+
+if [ ! -f "${KEY}" ]; then
+	echo "Erzeuge einen neuen, nur für diesen Rechner gültigen Signaturschlüssel ..."
+	rm -f "${PUB}"
+fi
+echo "Baue und signiere die NVIDIA-Module ..."
+dkms autoinstall --force
+[ -f "${PUB}" ] || { echo "Kein Signaturschlüssel entstanden – ist dkms aktuell?" >&2; exit 1; }
+
+echo "Melde den Schlüssel zur Registrierung beim nächsten Neustart an ..."
+HASH="$(mktemp)"
+mokutil --generate-hash="${PASSWORD}" > "${HASH}"
+mokutil --import "${PUB}" --hash-file "${HASH}"
+rm -f "${HASH}"
+install -d /var/lib/@ID@
+echo "${PASSWORD}" > /var/lib/@ID@/mok-pending
+
+cat <<TXT
+
+Beim nächsten Neustart erscheint ein blauer Bildschirm (MOK-Manager).
+Innerhalb von 10 Sekunden eine Taste drücken, dann:
+  Enroll MOK → Continue → Yes → Passwort: ${PASSWORD} → Reboot
+TXT
