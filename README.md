@@ -185,6 +185,37 @@ Das Branding bleibt dabei erhalten, `os-release` ist per `dpkg-divert` geschütz
   (z. B. `saiyukios-desktop`) über ein eigenes APT-Repository verteilen. Dann
   bekommen auch installierte Systeme Design-Updates.
 
+## Quellcode-Archiv
+
+Viele Pakete in SaiyukiOS stehen unter der GPL. Wer das ISO an andere
+weitergibt, muss auch den Quellcode dazu bereitstellen können. Dafür kann der
+Build ein Quellcode-Archiv aller enthaltenen Pakete erzeugen:
+
+- **GitHub Actions:** Beim manuellen Start ist „Quellcode-Archiv erzeugen“
+  vorausgewählt. Bei Versions-Tags (`v*`) wird es immer erzeugt. Es landet als
+  zweites Artefakt **quellcode** neben dem ISO.
+- **Lokal:** `sudo BUILD_SOURCE=yes ./build.sh` bzw.
+  `BUILD_SOURCE=yes ./build-in-docker.sh`
+
+Das Archiv ist etwa 7 GB groß und in Teile unter 2 GB zerlegt:
+
+| Datei | Inhalt |
+|---|---|
+| `saiyukios-1.0-source.debian.tar.teil-00` … | Debian-Quellpakete aller installierten Pakete, dazu unter `nvidia/` die quelloffenen NVIDIA-Teile (nvidia-settings, EGL-Bibliotheken, offene Kernelmodule) von github.com/NVIDIA und die freien Teile des 550er-Treibers |
+| `saiyukios-1.0-source.live.tar` | die live-build-Konfiguration, also dieses Repository zum Build-Zeitpunkt |
+| `saiyukios-1.0-source.sha256` | Prüfsummen |
+| `saiyukios-1.0-fehlende-quellen.txt` | Pakete ohne verfügbaren Quellcode (v. a. proprietäre NVIDIA-Teile) |
+
+Die Teile setzt du so wieder zusammen:
+
+```bash
+cat saiyukios-1.0-source.debian.tar.teil-* > saiyukios-1.0-source.debian.tar
+```
+
+Bei einem privaten Repository zählen GitHub-Artefakte zum Speicherkontingent
+deines Kontos. ISO und Quellcode zusammen belegen pro Lauf rund 10 GB. Alte
+Läufe löschst du unter *Actions*, sie verfallen sonst nach 14 Tagen.
+
 ## Rechtliches
 
 Die Distribution besteht aus Debian-Paketen unter ihren jeweiligen freien

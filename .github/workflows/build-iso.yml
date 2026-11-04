@@ -2,22 +2,34 @@ name: ISO bauen
 
 on:
   workflow_dispatch:        # manuell über den Reiter "Actions" starten
+    inputs:
+      quellcode:
+        description: "Quellcode-Archiv aller Pakete erzeugen (rund 7 GB, nötig für eine öffentliche Weitergabe)"
+        type: boolean
+        default: true
   push:
-    tags: ['v*']            # oder automatisch bei einem Versions-Tag, z. B. v1.0
+    tags: ['v*']            # oder automatisch bei einem Versions-Tag, z. B. v1.0 (immer mit Quellcode)
 
 jobs:
   build:
     runs-on: ubuntu-24.04
-    timeout-minutes: 120
+    timeout-minutes: 240
+    env:
+      # Bei Tags immer, beim manuellen Start je nach Auswahl
+      BUILD_SOURCE: ${{ (github.event_name == 'push' || inputs.quellcode) && 'yes' || 'no' }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Speicherplatz freimachen
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache \
+            /usr/local/share/boost /usr/local/lib/node_modules /usr/share/swift \
+            /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google \
+            /opt/az /usr/lib/jvm
+          docker system prune -af >/dev/null
           df -h /
 
-      - name: ISO bauen
+      - name: ISO bauen${{ env.BUILD_SOURCE == 'yes' && ' (mit Quellcode)' || '' }}
         run: ./build-in-docker.sh
 
       - name: ISO hochladen
@@ -27,5 +39,18 @@ jobs:
           path: |
             *.iso
             *.iso.sha256
+          compression-level: 0
+          retention-days: 14
+
+      - name: Quellcode hochladen
+        if: env.BUILD_SOURCE == 'yes'
+        uses: actions/upload-artifact@v4
+        with:
+          name: quellcode
+          path: |
+            *-source.debian.tar.teil-*
+            *-source.live.tar
+            *-source.sha256
+            *-fehlende-quellen.txt
           compression-level: 0
           retention-days: 14

@@ -15,6 +15,12 @@ config/hooks/normal/
 config/includes.chroot_after_packages/root/distro-build/
 
 # Ergebnisse
+source/
+source.modified_timestamps
+*-source.debian.tar*
+*-source.live.tar*
+*-source.sha256
+*-fehlende-quellen.txt
 *.iso
 *.iso.sha256
 *.contents

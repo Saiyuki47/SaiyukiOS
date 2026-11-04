@@ -9,5 +9,6 @@ docker run --rm --privileged \
 	-v "${PWD}:/build" -w /build \
 	-e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
 	${APT_HTTP_PROXY:+-e APT_HTTP_PROXY="${APT_HTTP_PROXY}"} \
+	${BUILD_SOURCE:+-e BUILD_SOURCE="${BUILD_SOURCE}"} \
 	"debian:${DEBIAN_SUITE}" \
 	bash -c './build.sh "$@"; rc=$?; chown -R "${HOST_UID}:${HOST_GID}" /build; exit $rc' -- "$@"

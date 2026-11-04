@@ -201,6 +201,26 @@ ISO="${DISTRO_ID}-${DISTRO_VERSION}-${ARCH}.hybrid.iso"
 [ -f "${ISO}" ] || die "Kein ISO entstanden – siehe build.log"
 sha256sum "${ISO}" > "${ISO}.sha256"
 
+# --- Quellcode-Archiv (optional) ----------------------------------------------
+if [ "${BUILD_SOURCE}" = "yes" ]; then
+	say "Lade den Quellcode aller Pakete (BUILD_SOURCE=yes) – das dauert"
+	# Das fertige Image wird nicht mehr gebraucht – Platz für rund 7 GB Quellen
+	rm -rf binary
+	lb config --source true --source-images tar 2>&1 | tee -a build.log
+	lb source 2>&1 | tee -a build.log
+	SRC="${DISTRO_ID}-${DISTRO_VERSION}-source.debian.tar"
+	LIVE="${DISTRO_ID}-${DISTRO_VERSION}-source.live.tar"
+	[ -f "${SRC}" ] || die "Kein Quellcode-Archiv entstanden – siehe build.log"
+	[ ! -f source/missing-source.txt ] || cp source/missing-source.txt "${DISTRO_ID}-${DISTRO_VERSION}-fehlende-quellen.txt"
+	rm -rf source
+	sha256sum "${SRC}" "${LIVE}" > "${DISTRO_ID}-${DISTRO_VERSION}-source.sha256"
+	# In Teile unter 2 GB zerlegen (passt so auch als Anhang eines GitHub-Releases).
+	# Zusammenfügen: cat ${SRC}.teil-* > ${SRC}
+	split -b 1900M -d -a 2 "${SRC}" "${SRC}.teil-"
+	rm -f "${SRC}"
+	say "Quellcode: $(ls "${SRC}".teil-* | wc -l) Teile, $(du -ch "${SRC}".teil-* | tail -n1 | cut -f1)"
+fi
+
 MIN=$(( ($(date +%s) - START) / 60 ))
 say "Fertig nach ${MIN} Minuten: ${ISO} ($(du -h "${ISO}" | cut -f1))"
 echo "    Testen:          ./test-vm.sh ${ISO}"

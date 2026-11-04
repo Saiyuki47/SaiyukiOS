@@ -1,0 +1,87 @@
+#!/bin/sh
+# Ergänzt das Quellcode-Archiv um Quellen, die live-build nicht selbst findet:
+#
+#  1) Quelloffene Teile aus NVIDIAs Paketquelle (nvidia-settings & Co. stehen
+#     unter der GPL bzw. MIT-Lizenz). NVIDIA bietet dafür keine deb-src an,
+#     den Code gibt es aber versionsgenau auf github.com/NVIDIA.
+#  2) Debians Treiber 550, der für GTX 750–1080 im Image zwischengespeichert,
+#     aber nicht installiert ist (live-build sammelt nur installierte Pakete).
+#
+# live-build führt den Hook im Ordner source/ aus.
+set -e
+. ../distro.conf
+CHROOT=../chroot
+OUT=debian/nvidia
+mkdir -p "${OUT}"
+
+# Installierte Version ohne Epoche und Debian-Revision, z. B. 1:1.0.6-1 → 1.0.6
+upstream_version() {
+	chroot "${CHROOT}" dpkg-query -W -f='${Version}' "$1" 2>/dev/null | sed -e 's/^[0-9]*://' -e 's/-[^-]*$//'
+}
+fetch() { # <GitHub-Projekt> <Tag> <Version>
+	if curl -fsSL -o "${OUT}/$1-$3.tar.gz" "https://github.com/NVIDIA/$1/archive/refs/tags/$2.tar.gz"; then
+		echo "  NVIDIA/$1 $2"
+	else
+		rm -f "${OUT}/$1-$3.tar.gz"
+		echo "  FEHLT: NVIDIA/$1 $2" >&2
+		echo "https://github.com/NVIDIA/$1 (Tag $2)" >> "${OUT}/NICHT-GEFUNDEN.txt"
+	fi
+}
+
+echo "Lade quelloffene NVIDIA-Teile von github.com/NVIDIA:"
+DRV="$(upstream_version nvidia-driver)"
+if [ -n "${DRV}" ]; then
+	for pkg in nvidia-settings nvidia-modprobe nvidia-persistenced; do
+		[ -n "$(upstream_version "${pkg}")" ] && fetch "${pkg}" "${DRV}" "${DRV}"
+	done
+	# Die offenen Kernelmodule liegen vollständig im Paket nvidia-kernel-open-dkms
+	# (/usr/src/nvidia-${DRV}); zusätzlich als eigenes Archiv:
+	fetch open-gpu-kernel-modules "${DRV}" "${DRV}"
+fi
+v="$(upstream_version libnvidia-egl-wayland21)"; [ -z "${v}" ] || fetch egl-wayland2 "v${v}" "${v}"
+v="$(upstream_version libnvidia-egl-wayland1)";  [ -z "${v}" ] || fetch egl-wayland "${v}" "${v}"
+v="$(upstream_version libnvidia-egl-gbm1)";      [ -z "${v}" ] || fetch egl-gbm "${v}" "${v}"
+v="$(upstream_version libnvidia-egl-xcb1)";      [ -z "${v}" ] || fetch egl-x11 "v${v}" "${v}"
+
+cat > "${OUT}/LIESMICH.txt" <<TXT
+${DISTRO_NAME} ${DISTRO_VERSION}: Quellen der NVIDIA-Komponenten
+
+NVIDIA-Treiber ${DRV:-?} (aus NVIDIAs Debian-Paketquelle)
+- Quelloffene Teile: die Archive in diesem Ordner, versionsgleich von
+  https://github.com/NVIDIA geladen.
+- Die übrigen Treiberbibliotheken sind proprietär (NVIDIA-Lizenz) und
+  werden unverändert weitergegeben; dafür gibt es keinen Quellcode.
+
+Debians NVIDIA-Treiber 550 (für GTX 750 bis GTX 1080, nur bei Bedarf installiert)
+- Quellpakete der freien Bestandteile im Unterordner legacy-550/
+  (z. B. nvidia-settings, nvidia-modprobe). Die proprietären Teile
+  (non-free) haben keinen Quellcode.
+TXT
+
+# Debian-Quellen der zwischengespeicherten 550er-Pakete
+LEGACY="${CHROOT}/var/cache/${DISTRO_ID}/nvidia-legacy"
+if ls "${LEGACY}"/*.deb >/dev/null 2>&1; then
+	echo "Lade Debian-Quellen der zwischengespeicherten 550er-Pakete:"
+	for deb in "${LEGACY}"/*.deb; do
+		# Proprietäre Pakete (non-free) haben keinen Quellcode, der mitgeliefert
+		# werden muss – Debians "Quellpaket" dafür wären nur NVIDIAs Binärdateien.
+		case "$(dpkg-deb -f "${deb}" Section)" in non-free*) continue ;; esac
+		pkg="$(dpkg-deb -f "${deb}" Package)"
+		ver="$(dpkg-deb -f "${deb}" Version)"
+		src="$(dpkg-deb -f "${deb}" Source)"
+		case "${src}" in
+			*"("*) ver="$(echo "${src}" | sed 's/.*(\(.*\)).*/\1/')"; src="${src%% *}" ;;
+			"") src="${pkg}" ;;
+		esac
+		echo "${src}=${ver}"
+	done | sort -u > "${CHROOT}/legacy-sources.txt"
+	mkdir -p "${CHROOT}/legacy-src"
+	chroot "${CHROOT}" chown _apt:root /legacy-src
+	while read -r s; do
+		chroot "${CHROOT}" sh -c "cd /legacy-src && apt-get -qq --only-source --download-only source '${s}'" >/dev/null 2>&1 \
+			&& echo "  ${s}" || echo "  FEHLT: ${s}" >&2
+	done < "${CHROOT}/legacy-sources.txt"
+	mkdir -p "${OUT}/legacy-550"
+	mv "${CHROOT}"/legacy-src/* "${OUT}/legacy-550/" 2>/dev/null || true
+	rm -rf "${CHROOT}/legacy-src" "${CHROOT}/legacy-sources.txt"
+fi
