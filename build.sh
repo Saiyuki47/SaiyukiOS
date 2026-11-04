@@ -63,16 +63,15 @@ lb config
 # Firmware-Auswahl von live-build frei von Download-"Installern".
 mkdir -p config/archives
 rm -f config/archives/debian-contrib.*
-cat > config/archives/debian-contrib.list.chroot <<LIST
-deb ${BUILD_MIRROR} @DISTRIBUTION@ contrib
-deb ${BUILD_MIRROR} @DISTRIBUTION@-updates contrib
-deb ${BUILD_MIRROR_SECURITY} @DISTRIBUTION@-security contrib
-LIST
-cat > config/archives/debian-contrib.list.binary <<LIST
-deb ${FINAL_MIRROR} @DISTRIBUTION@ contrib
-deb ${FINAL_MIRROR} @DISTRIBUTION@-updates contrib
-deb ${FINAL_MIRROR_SECURITY} @DISTRIBUTION@-security contrib
-LIST
+# (deb-src: damit auch der Quellcode dieser Pakete ins Quellcode-Archiv kommt)
+for kind in chroot binary; do
+	if [ "${kind}" = chroot ]; then M="${BUILD_MIRROR}" MS="${BUILD_MIRROR_SECURITY}"; else M="${FINAL_MIRROR}" MS="${FINAL_MIRROR_SECURITY}"; fi
+	for type in deb deb-src; do
+		echo "${type} ${M} @DISTRIBUTION@ contrib"
+		echo "${type} ${M} @DISTRIBUTION@-updates contrib"
+		echo "${type} ${MS} @DISTRIBUTION@-security contrib"
+	done > "config/archives/debian-contrib.list.${kind}"
+done
 
 # --- NVIDIA-Paketquelle ----------------------------------------------------
 rm -f config/archives/nvidia.* config/package-lists/nvidia.list.chroot
